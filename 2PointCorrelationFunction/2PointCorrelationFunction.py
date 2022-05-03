@@ -26,12 +26,13 @@ from datetime import datetime
 from scipy import stats
 
 #to use ROOT classes and methods
-import ROOT
+#import ROOT
 
 rc('font',**{'family':'serif','serif':['DejaVu Sans']})
 rc('text', usetex=True)
 plt.rcParams["figure.autolayout"] = True
 
+#Computes the average correlation function
 def Average2PointCorrFunction(list_of_bin_edges, list_of_bin_contents):
 
     #it assumes the binning of all histograms is the same
@@ -53,10 +54,12 @@ def Average2PointCorrFunction(list_of_bin_edges, list_of_bin_contents):
 
     return avg_bin_content, avg_bin_edges
 
+#Computes the dot product between 2 vectors on a unit sphere
 def spherical_dot(alpha1, delta1, alpha2, delta2):
     return math.cos(delta1)*math.cos(delta2)*math.cos(alpha1 - alpha2) + math.sin(delta1)*math.sin(delta2)
 
-def Get2PointCorrFunc(filename, col_alpha, col_delta, col_gpstime, SampleSize):
+#Computes the 2 point correlation function
+def Get2PointCorrFunc(filename, col_alpha, col_delta, col_gpstime, max_ang_sep, SampleSize):
 
     df = pd.read_parquet(filename, engine = 'fastparquet')
 
@@ -83,17 +86,31 @@ def Get2PointCorrFunc(filename, col_alpha, col_delta, col_gpstime, SampleSize):
             if(ang_pos1 == ang_pos2):
                 continue
 
-            list_of_dot_prod.append(spherical_dot(ang_pos1[0], ang_pos1[1], ang_pos2[0], ang_pos2[1]))
+            ang_sep = math.acos(spherical_dot(ang_pos1[0], ang_pos1[1], ang_pos2[0], ang_pos2[1]))
+
+            if( ang_sep > max_ang_sep):
+                continue
+
+            list_of_dot_prod.append(ang_sep)
+
+        count+=1
+
+        print(count,'events done!')
 
     #eliminate duplicate elements
     list_of_dot_prod_no_reps = np.unique(list_of_dot_prod)
 
-    list_of_ang_dist = []
+    return np.degrees(list_of_dot_prod_no_reps)
 
-    for dot_prod in list_of_dot_prod_no_reps:
-        list_of_ang_dist.append(math.acos(dot_prod))
+#read the two point correlation function for the ensemble of uniformly distributed events
+def Read2PointCorrFunc(filename):
 
-    return np.degrees(list_of_ang_dist)
+    corrfunc = pd.read_parquet(filename, engine='fastparquet')
+
+    bin_edges = corrfunc['2pointcorr_bin_edges'].to_numpy()
+    bin_contents = corrfunc['2pointcorr_bin_content'].to_numpy()
+
+    return bin_edges, bin_contents
 
 #define the log likelihood function
 def logLikelihood(avg_bin_content, obs_bin_content):
@@ -106,52 +123,54 @@ def logLikelihood(avg_bin_content, obs_bin_content):
     return -np.sum(avg_bin_content) + np.sum(obs_bin_content*np.log(avg_bin_content)) - factorial_sum
 
 #set path to dir with uniform dist files
-path_of_dir = './' #/home/miguelm/Documents/Anisotropies/DataSets/UD_large_stats/'
+path_of_uniform_dir = '../DataSets/UD_large_stats/2PointCorrFunc/'
 
 #list to hold histograms 2point correlation functions
 list_of_hist_binedges_2pointcorrfunc = []
 list_of_hist_contents_2pointcorrfunc = []
 
-for file in os.listdir(path_of_dir):
+for file in os.listdir(path_of_uniform_dir):
 
-    filename = os.path.join(path_of_dir,file)
+    filename = os.path.join(path_of_uniform_dir,file)
 
     if os.path.isfile(filename) and '2PointCorrelationFunction_N_' in filename:
 
         begin_task = datetime.now()
 
-        df_2pointcorr = pd.read_parquet(filename, engine = 'fastparquet')
+        bin_edges, bin_contents = Read2PointCorrFunc(filename)
 
-        list_of_hist_binedges_2pointcorrfunc.append(df_2pointcorr['2pointcorr_bin_edges'].to_numpy())
-        list_of_hist_contents_2pointcorrfunc.append(df_2pointcorr['2pointcorr_bin_content'].to_numpy())
-
-        plt.plot(df_2pointcorr['2pointcorr_bin_edges'].to_numpy(), df_2pointcorr['2pointcorr_bin_content'].to_numpy())
+        list_of_hist_binedges_2pointcorrfunc.append(bin_edges)
+        list_of_hist_contents_2pointcorrfunc.append(bin_contents)
 
         print('This took', datetime.now() - begin_task)
 
 avg_bin_content, avg_bin_edges = Average2PointCorrFunction(list_of_hist_binedges_2pointcorrfunc, list_of_hist_contents_2pointcorrfunc)
 
 #compute the likelihood distribution
-log_likelihood = []
+#log_likelihood = []
 
-for corr_func_bin_content in list_of_hist_contents_2pointcorrfunc:
+#for corr_func_bin_content in list_of_hist_contents_2pointcorrfunc:
 
-    log_likelihood.append(logLikelihood(avg_bin_content, corr_func_bin_content))
+    #log_likelihood.append(logLikelihood(avg_bin_content, corr_func_bin_content))
 
-#plt.plot(avg_bin_edges, avg_bin_content)
+plt.plot(avg_bin_edges, avg_bin_content, label='Uniform Distribution')
 
 #compute the 2 point correlation function for the file with a point repeater
-path_to_rep_file = '/home/miguelm/Documents/Anisotropies/DataSets/MockData_Repeaters/'
-repeater_file = 'TimeOrdered_Events_ExponentialRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_1000_AcceptedRepEvents_407.parquet'
+path_to_rep_file = '../DataSets/MockData_Repeaters/'
+repeater_file = 'TimeOrdered_Events_ExponentialRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100.parquet'
 
-rep_2pointcorrfunc_2 = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', 1000)
+#defines the maximum angular seperation
+max_ang_sep = math.pi/4
 
-print(len(rep_2pointcorrfunc_2))
+rep_2pointcorrfunc_2 = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', max_ang_sep, 10000)
 
-#plt.hist(rep_2pointcorrfunc_2, bins= 180, range = [0,180])
+#print(len(rep_2pointcorrfunc_2))
 
-plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
+plt.hist(rep_2pointcorrfunc_2, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
 
+#plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
+
+plt.legend()
 plt.show()
 
 #hist_content, hist_bin_edges = np.histogram(list_of_ang_dist, 180)
