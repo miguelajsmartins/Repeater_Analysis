@@ -132,7 +132,7 @@ path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Inclined/UD
 #path_to_dir_rep = '/home/miguelm/Documents/Anisotropies/Repeater_Analysis/DataSets/MockData_Repeaters/Rep_large_stats/'
 
 #define tau threshold in log10(tau) with tau in days
-tau_th = 0
+tau_th = -0.5
 
 #list to hold all tau values from all data sets of isotropy
 tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau_3326')
