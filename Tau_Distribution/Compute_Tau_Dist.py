@@ -32,20 +32,20 @@ def SelectAugerData(filename, energy_th, theta_min, theta_max, t_min, t_max):
     #saves raw auger data from input file
     auger_data_raw = pd.read_parquet(filename, engine='fastparquet')
 
-    #applies cuts in energy
-    auger_data = auger_data_raw.loc[(auger_data_raw['sd_theta'] > theta_min) & (auger_data_raw['sd_theta'] < theta_max) & (auger_data_raw['sd_energy'] > energy_th) & (auger_data_raw['sd_gpstime'] > t_min) & (auger_data_raw['sd_gpstime'] < t_max) ]
+    #applies cuts in energy, and theta and time
+    auger_data = auger_data_raw.loc[(auger_data_raw['sd_theta'] > theta_min) & (auger_data_raw['sd_theta'] < theta_max) & (auger_data_raw['sd_energy'] > energy_th) & (auger_data_raw['gpstime'] > t_min) & (auger_data_raw['gpstime'] < t_max) ]
 
     #saves the number of events after cuts
     N_events = len(auger_data.index)
 
     #saves the gpstime
-    evt_gpstime = auger_data['sd_gpstime'].to_numpy()
+    evt_gpstime = auger_data['gpstime'].to_numpy()
 
     #list to hold events
     event_list = []
 
     for i in range(N_events):
-        time = auger_data.iloc[i]['sd_gpstime']
+        time = auger_data.iloc[i]['gpstime']
         ra = math.radians(auger_data.iloc[i]['sd_ra'])
         dec = math.radians(auger_data.iloc[i]['sd_dec'])
         energy = auger_data.iloc[i]['sd_energy']
@@ -87,12 +87,12 @@ def EventInSphericalCap(alpha_center, delta_center, alpha, delta, ang_window):
 
 #defines the cuts to apply to auger data
 energy_th = math.sqrt(10)
-theta_min = 60
-theta_max = 80
+theta_min = 0
+theta_max = 60
 
 #saves auger events after appyling the cuts
-path_to_data = '../DataSets/Auger_Pub_data/'
-data_file = 'AugerOpenData_InclinedEvents_eFit.parquet'
+path_to_data = '../DataSets/Auger_Pub_Data/'
+data_file = 'AugerOpenData_VerticalEvents.parquet'
 t_min, t_max, accepted_events_list = SelectAugerData(path_to_data + data_file, energy_th, theta_min, theta_max, Time('2004-01-01T00:00:00', format='fits').gps, Time('2021-12-31T23:59:59', format='fits').gps)
 
 #print the number of events and the dates between which events are being considered
@@ -171,12 +171,12 @@ output_data = pd.DataFrame(accepted_events_with_tau, columns=['evt1_ra (rad)','e
 print(output_data)
 
 #save data in file
-output_data.to_parquet('./results/AugerOpenData_InclinedEvents_with_tau.parquet', index=False)
+output_data.to_parquet('./results/AugerOpenData_VerticalEvents_with_tau.parquet', index=False)
 
 #export output file with relevant parameters
 selection_info = np.array([len(accepted_events_list), energy_th, theta_min, theta_max, ang_window, Time(t_min,format='gps').fits, Time(t_max,format='gps').fits])
 
 output_info = pd.DataFrame([selection_info], columns=["N_events","E_th","Theta_min", "Theta_max","Ang_window","t_begin","t_end"])
-output_info.to_parquet('./results/AugerOpenData_InclinedEvents_SelectionInfo.parquet', index=False)
+output_info.to_parquet('./results/AugerOpenData_VerticalEvents_SelectionInfo.parquet', index=False)
 
 print(output_info.info())

@@ -135,7 +135,7 @@ path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Inclined/UD
 tau_th = -0.5
 
 #list to hold all tau values from all data sets of isotropy
-tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau_3326')
+tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau')
 
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
 
@@ -174,9 +174,15 @@ t_begin = Time(auger_selection_info.iloc[0]['t_begin'], format='fits').gps
 t_end = Time(auger_selection_info.iloc[0]['t_end'], format = 'fits').gps
 
 #computes the average rate of events in events per sidereal day
-average_rate = 86164 * N_events/(t_end - t_begin)
+lat_auger = -35.28
+average_rate = 86164 * N_events/(t_end - t_begin) * (1 - math.cos(math.radians(ang_window)))/(1 + math.sin(math.radians(theta_max - lat_auger)))
+auger_avg_rate = 1 / np.mean(tau_auger)
+ud_avg_rate = 1 / np.mean(tau_ud_all)
 
 print('Average rate', average_rate)
+print('Rate from mean auger tau', auger_avg_rate)
+print('Rate from mean uniform dist tau', ud_avg_rate)
+
 #---------------------------------------
 # To plot histograms of tau distribution
 #---------------------------------------
@@ -188,16 +194,16 @@ ks_stat_value, ks_p_value = stats.kstest(tau_auger, tau_ud_all)
 fig_tau_log = plt.figure(figsize=(10,8)) #create figure
 ax_tau_log = fig_tau_log.add_subplot(111) #create subplot with a set of axis with
 
-ax_tau_log.hist(np.log10(tau_auger), bins=100, range=[-2,4], alpha = 0.5, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
+ax_tau_log.hist(np.log10(tau_auger), bins=200, range=[-2,4], alpha = 0.5, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
 
-log_tau_avg_hist_edges, log_tau_avg_hist_content = AverageTauDist(list_of_log_tau_arrays, 100, -2, 4)
+log_tau_avg_hist_edges, log_tau_avg_hist_content = AverageTauDist(list_of_log_tau_arrays, 200, -2, 4)
 
 ax_tau_log.plot(log_tau_avg_hist_edges, log_tau_avg_hist_content, label=r'Isotropy')
 #ax_tau_log.plot(np.arange(-2,4,0.01), len(tau_auger)*LogExpEnvelop(np.arange(-2,4,0.01), average_rate), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
 
-ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.3f}' % ks_p_value)
+ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
 
-ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Delta \theta = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
 ax_tau_log.set_ylabel(r'Number of pairs', fontsize=20)
 ax_tau_log.tick_params(axis='both', which='major', labelsize=20)
@@ -220,7 +226,7 @@ fig_tau_log.savefig('./AugerInclinedData/Average_log10tau_distribution_AugerIncl
 #
 # ax_tau.plot(tau_avg_hist_edges, tau_avg_hist_content, label=r'Isotropy')
 #
-# ax_tau.set_title(r'$\tau$ distribution for angular window $\Delta \theta = 1^\circ$',fontsize=24)
+# ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = 1^\circ$',fontsize=24)
 # ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize=20)
 # ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
 # ax_tau.tick_params(axis='both', which='major', labelsize=20)
@@ -236,7 +242,7 @@ fig_tau_log.savefig('./AugerInclinedData/Average_log10tau_distribution_AugerIncl
 # plot of cdf of log tau
 #---------------------------------------
 fig_cdf_tau_log = plt.figure(figsize=(10,8)) #create figure
-ax_cdf_tau_log = fig_cdf_tau_log.add_subplot(111) #create subplot with a set of axis with
+ax_cdf_tau_log = fig_cdf_tau_log.add_subplot(111) #reate subplot with a set of axis with
 
 cdf_rep_bin_edges, cdf_rep_content = ComulativeDistFunc(np.log10(tau_auger), 100)
 cdf_ud_bin_edges, cdf_ud_content = ComulativeDistFunc(np.log10(tau_ud_all), 100)
@@ -244,7 +250,7 @@ cdf_ud_bin_edges, cdf_ud_content = ComulativeDistFunc(np.log10(tau_ud_all), 100)
 ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
 ax_cdf_tau_log.plot(cdf_ud_bin_edges, cdf_ud_content, label=r'Isotropy')
 
-ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Delta \theta = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_cdf_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
 ax_cdf_tau_log.set_ylabel(r'Arb. Units', fontsize=20)
 ax_cdf_tau_log.tick_params(axis='both', which='major', labelsize=20)
