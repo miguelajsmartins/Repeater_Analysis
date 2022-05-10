@@ -88,11 +88,11 @@ def EventInSphericalCap(alpha_center, delta_center, alpha, delta, ang_window):
 #defines the cuts to apply to auger data
 energy_th = math.sqrt(10)
 theta_min = 0
-theta_max = 80
+theta_max = 60
 
 #saves auger events after appyling the cuts
 path_to_data = '../DataSets/Auger_Pub_Data/'
-data_file = 'AugerOpenData_AllEventsWithCuts.parquet'
+data_file = 'AugerOpenData_VerticalEvents.parquet'
 t_min, t_max, accepted_events_list = SelectAugerData(path_to_data + data_file, energy_th, theta_min, theta_max, Time('2004-01-01T00:00:00', format='fits').gps, Time('2021-12-31T23:59:59', format='fits').gps)
 
 #print the number of events and the dates between which events are being considered
@@ -171,12 +171,12 @@ output_data = pd.DataFrame(accepted_events_with_tau, columns=['evt1_ra (rad)','e
 print(output_data)
 
 #save data in file
-output_data.to_parquet('./results/AugerOpenData_AllEvents_with_tau.parquet', index=False)
+output_data.to_parquet('./results/AugerOpenData_VerticalEvents_with_tau.parquet', index=False)
 
 #export output file with relevant parameters
 selection_info = np.array([len(accepted_events_list), energy_th, theta_min, theta_max, ang_window, Time(t_min,format='gps').fits, Time(t_max,format='gps').fits])
 
 output_info = pd.DataFrame([selection_info], columns=["N_events","E_th","Theta_min", "Theta_max","Ang_window","t_begin","t_end"])
-output_info.to_parquet('./results/AugerOpenData_AllEvents_SelectionInfo.parquet', index=False)
+output_info.to_parquet('./results/AugerOpenData_VerticalEvents_SelectionInfo.parquet', index=False)
 
 print(output_info.info())

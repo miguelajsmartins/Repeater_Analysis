@@ -128,14 +128,14 @@ def LogExpEnvelop(x, rate):
     return rate*np.exp(-rate*np.exp(x) + x)
 
 #set path to dir with uniform dist files
-path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Inclined+Vertical/UD_AugerOpenData_stats'
+path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Inclined/UD_AugerOpenData_stats'
 #path_to_dir_rep = '/home/miguelm/Documents/Anisotropies/Repeater_Analysis/DataSets/MockData_Repeaters/Rep_large_stats/'
 
 #define tau threshold in log10(tau) with tau in days
 tau_th = 0
 
 #list to hold all tau values from all data sets of isotropy
-tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_AllAugerPubEvents_with_tau')
+tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau')
 
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
 
@@ -156,8 +156,8 @@ list_of_log_tau_arrays = [np.log10(tau) for tau in list_of_ordered_taus_ud]
 # store the tau distribution from auger data and saves important info from the selection info file
 #----------------------
 path_to_auger_data = '../results/'
-auger_data_file = 'AugerOpenData_AllEvents_with_tau.parquet'
-auger_selection_file = 'AugerOpenData_AllEvents_SelectionInfo.parquet'
+auger_data_file = 'AugerOpenData_InclinedEvents_with_tau.parquet'
+auger_selection_file = 'AugerOpenData_InclinedEvents_SelectionInfo.parquet'
 
 auger_data = pd.read_parquet(path_to_auger_data + auger_data_file, engine='fastparquet')
 auger_selection_info = pd.read_parquet(path_to_auger_data + auger_selection_file, engine='fastparquet')
@@ -174,9 +174,15 @@ t_begin = Time(auger_selection_info.iloc[0]['t_begin'], format='fits').gps
 t_end = Time(auger_selection_info.iloc[0]['t_end'], format = 'fits').gps
 
 #computes the average rate of events in events per sidereal day
-average_rate = 86164 * N_events/(t_end - t_begin)
+lat_auger = -35.28
+average_rate = 86164 * N_events/(t_end - t_begin) * (1 - math.cos(math.radians(ang_window)))/(1 + math.sin(math.radians(theta_max - lat_auger)))
+auger_avg_rate = 1 / np.mean(tau_auger)
+ud_avg_rate = 1 / np.mean(tau_ud_all)
 
 print('Average rate', average_rate)
+print('Rate from mean auger tau', auger_avg_rate)
+print('Rate from mean uniform dist tau', ud_avg_rate)
+
 #---------------------------------------
 # To plot histograms of tau distribution
 #---------------------------------------
@@ -197,16 +203,16 @@ ax_tau_log.plot(log_tau_avg_hist_edges, log_tau_avg_hist_content, label=r'Isotro
 
 ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
 
-ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Delta \theta = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
 ax_tau_log.set_ylabel(r'Number of pairs', fontsize=20)
 ax_tau_log.tick_params(axis='both', which='major', labelsize=20)
 ax_tau_log.set_yscale('log')
-ax_tau_log.set_ylim(1e-2, 1e4)
+ax_tau_log.set_ylim(1e-2, 1e2)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./AugerOpenData/Average_log10tau_distribution_AugerOpenData.pdf')
+fig_tau_log.savefig('./AugerInclinedData/Average_log10tau_distribution_AugerInclinedData.pdf')
 
 #--------------------------------------
 # plot of tau distributions
@@ -220,7 +226,7 @@ fig_tau_log.savefig('./AugerOpenData/Average_log10tau_distribution_AugerOpenData
 #
 # ax_tau.plot(tau_avg_hist_edges, tau_avg_hist_content, label=r'Isotropy')
 #
-# ax_tau.set_title(r'$\tau$ distribution for angular window $\Delta \theta = 1^\circ$',fontsize=24)
+# ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = 1^\circ$',fontsize=24)
 # ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize=20)
 # ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
 # ax_tau.tick_params(axis='both', which='major', labelsize=20)
@@ -236,7 +242,7 @@ fig_tau_log.savefig('./AugerOpenData/Average_log10tau_distribution_AugerOpenData
 # plot of cdf of log tau
 #---------------------------------------
 fig_cdf_tau_log = plt.figure(figsize=(10,8)) #create figure
-ax_cdf_tau_log = fig_cdf_tau_log.add_subplot(111) #create subplot with a set of axis with
+ax_cdf_tau_log = fig_cdf_tau_log.add_subplot(111) #reate subplot with a set of axis with
 
 cdf_rep_bin_edges, cdf_rep_content = ComulativeDistFunc(np.log10(tau_auger), 100)
 cdf_ud_bin_edges, cdf_ud_content = ComulativeDistFunc(np.log10(tau_ud_all), 100)
@@ -244,7 +250,7 @@ cdf_ud_bin_edges, cdf_ud_content = ComulativeDistFunc(np.log10(tau_ud_all), 100)
 ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
 ax_cdf_tau_log.plot(cdf_ud_bin_edges, cdf_ud_content, label=r'Isotropy')
 
-ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Delta \theta = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_cdf_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
 ax_cdf_tau_log.set_ylabel(r'Arb. Units', fontsize=20)
 ax_cdf_tau_log.tick_params(axis='both', which='major', labelsize=20)
@@ -253,7 +259,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize=18)
 
-fig_cdf_tau_log.savefig('./AugerOpenData/Average_log10tau_CDF_AugerInclinedData.pdf')
+fig_cdf_tau_log.savefig('./AugerInclinedData/Average_log10tau_CDF_AugerInclinedData.pdf')
 
 #list with the integration limits given in sidereal days!!!!!
 list_of_integration_lims = [0,1]
@@ -323,6 +329,6 @@ for i in range(1,len(list_of_integration_lims)):
     ax_est.tick_params(axis='both', which='major', labelsize=20)
     ax_est.legend(loc='upper right', fontsize=18)
 
-    fig_est.savefig('./AugerOpenData/Estimator_distribution_histogram_AugerOpenData.pdf')
+    fig_est.savefig('./AugerInclinedData/Estimator_distribution_histogram_AugerInclinedData.pdf')
 
     print('A 5 sigma excess in our estimator corresponds to', 5*math.sqrt(np.var(estimator_list)))
