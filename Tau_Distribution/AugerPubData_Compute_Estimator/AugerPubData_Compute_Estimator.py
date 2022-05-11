@@ -106,6 +106,26 @@ def EstimatorDist(list_of_ordered_taus, lower_lim, upper_lim):
 
     return estimator_list
 
+#computes the distribution of the minimum tau
+def PValueTauMinDist(list_of_ordered_taus, tau_auger):
+
+    tau_min_list = []
+
+    for tau_list in list_of_ordered_taus:
+        tau_min_list.append(tau_list[0])
+
+    #computes the min tau of auger data
+    tau_auger_min = min(tau_auger)
+
+    #computes the p-value
+    integral_below = len([tau_min for tau_min in tau_min_list if tau_min < tau_auger_min])
+    p_value = integral_below/len(tau_min_list)
+
+    if( p_value > 0.5):
+        p_value = 1 - p_value
+
+    return tau_min_list, tau_auger_min, p_value
+
 #compute chi^2 for a fit
 def Chi_Square(y_data, y_true, sigma):
 
@@ -123,19 +143,19 @@ def ComulativeDistFunc(data, nbins):
     return pdf_bin_edges[1:], cdf
 
 #draws an exponential envelop
-def LogExpEnvelop(x, rate):
+def LogExpEnvelop(x, rate, x_max):
 
-    return rate*np.exp(-rate*np.exp(x) + x)
+    return math.log(10)*np.power(10,x)*(rate/ (1 - np.exp(-rate*x_max)) )*np.exp(-rate*np.power(10,x))
 
 #set path to dir with uniform dist files
-path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Inclined/UD_AugerOpenData_stats'
+path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Vertical/UD_AugerOpenData_stats'
 #path_to_dir_rep = '/home/miguelm/Documents/Anisotropies/Repeater_Analysis/DataSets/MockData_Repeaters/Rep_large_stats/'
 
 #define tau threshold in log10(tau) with tau in days
 tau_th = -0.5
 
 #list to hold all tau values from all data sets of isotropy
-tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau')
+tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'Ud_events_with_tau')
 
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
 
@@ -156,8 +176,8 @@ list_of_log_tau_arrays = [np.log10(tau) for tau in list_of_ordered_taus_ud]
 # store the tau distribution from auger data and saves important info from the selection info file
 #----------------------
 path_to_auger_data = '../results/'
-auger_data_file = 'AugerOpenData_InclinedEvents_with_tau.parquet'
-auger_selection_file = 'AugerOpenData_InclinedEvents_SelectionInfo.parquet'
+auger_data_file = 'AugerOpenData_VerticalEvents_with_tau.parquet'
+auger_selection_file = 'AugerOpenData_VerticalEvents_SelectionInfo.parquet'
 
 auger_data = pd.read_parquet(path_to_auger_data + auger_data_file, engine='fastparquet')
 auger_selection_info = pd.read_parquet(path_to_auger_data + auger_selection_file, engine='fastparquet')
@@ -175,11 +195,11 @@ t_end = Time(auger_selection_info.iloc[0]['t_end'], format = 'fits').gps
 
 #computes the average rate of events in events per sidereal day
 lat_auger = -35.28
-average_rate = 86164 * N_events/(t_end - t_begin) * (1 - math.cos(math.radians(ang_window)))/(1 + math.sin(math.radians(theta_max - lat_auger)))
+teo_average_rate = 86164 * N_events/(t_end - t_begin) * (1 - math.cos(math.radians(ang_window)))/(1 + math.sin(math.radians(theta_max - lat_auger)))
 auger_avg_rate = 1 / np.mean(tau_auger)
 ud_avg_rate = 1 / np.mean(tau_ud_all)
 
-print('Average rate', average_rate)
+print('Average rate', teo_average_rate)
 print('Rate from mean auger tau', auger_avg_rate)
 print('Rate from mean uniform dist tau', ud_avg_rate)
 
@@ -199,20 +219,20 @@ ax_tau_log.hist(np.log10(tau_auger), bins=200, range=[-2,4], alpha = 0.5, label=
 log_tau_avg_hist_edges, log_tau_avg_hist_content = AverageTauDist(list_of_log_tau_arrays, 200, -2, 4)
 
 ax_tau_log.plot(log_tau_avg_hist_edges, log_tau_avg_hist_content, label=r'Isotropy')
-#ax_tau_log.plot(np.arange(-2,4,0.01), len(tau_auger)*LogExpEnvelop(np.arange(-2,4,0.01), average_rate), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
+ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
 
-ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
+#ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
 
 ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
 ax_tau_log.set_ylabel(r'Number of pairs', fontsize=20)
 ax_tau_log.tick_params(axis='both', which='major', labelsize=20)
 ax_tau_log.set_yscale('log')
-ax_tau_log.set_ylim(1e-2, 1e2)
+ax_tau_log.set_ylim(1e-2, 1e4)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./AugerInclinedData/Average_log10tau_distribution_AugerInclinedData.pdf')
+fig_tau_log.savefig('./AugerVerticalData/Average_log10tau_distribution_AugerVerticalData.pdf')
 
 #--------------------------------------
 # plot of tau distributions
@@ -259,7 +279,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize=18)
 
-fig_cdf_tau_log.savefig('./AugerInclinedData/Average_log10tau_CDF_AugerInclinedData.pdf')
+fig_cdf_tau_log.savefig('./AugerVerticalData/Average_log10tau_CDF_AugerVerticalData.pdf')
 
 #list with the integration limits given in sidereal days!!!!!
 list_of_integration_lims = [0,1]
@@ -329,6 +349,28 @@ for i in range(1,len(list_of_integration_lims)):
     ax_est.tick_params(axis='both', which='major', labelsize=20)
     ax_est.legend(loc='upper right', fontsize=18)
 
-    fig_est.savefig('./AugerInclinedData/Estimator_distribution_histogram_AugerInclinedData.pdf')
+    fig_est.savefig('./AugerVerticalData/Estimator_distribution_histogram_AugerVerticalData.pdf')
 
     print('A 5 sigma excess in our estimator corresponds to', 5*math.sqrt(np.var(estimator_list)))
+
+#compute the distribution of tau_min
+tau_min_ud, tau_min_auger, tau_min_p_value = PValueTauMinDist(list_of_ordered_taus_ud, tau_auger)
+
+#plot the distribution of tau min
+fig_TauMin = plt.figure(figsize=(10,8)) #create figure
+ax_TauMin = fig_TauMin.add_subplot(111) #create subplot with a set of axis with
+
+content, bins, _ = ax_TauMin.hist(np.log10(tau_min_ud), bins = 50, range=[min(np.log10(tau_min_ud)), max(np.log10(tau_min_ud))], alpha=0.5, label='Uniform distribution')
+#content_rep, bins_rep, _ = ax_est.hist(estimator_list_rep, bins = max(estimator_list_rep) - min(estimator_list_rep), range=[min(estimator_list_rep), max(estimator_list_rep)], alpha=0.5, label='Repeater distribution')
+
+ax_TauMin.axvline(np.log10(tau_min_auger), 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
+
+ax_TauMin.plot([],linewidth=0, label=r'$p$-value = {%.3f}' % (tau_min_p_value))
+
+ax_TauMin.set_title(r'$\log_{10}(\tau_{\min})$ distribution', fontsize=24)
+ax_TauMin.set_xlabel(r'$\log_{10}(\tau_{\min} / 1\textrm{ sideral day}) $', fontsize=20)
+ax_TauMin.set_ylabel(r'Arb. units', fontsize=20)
+ax_TauMin.tick_params(axis='both', which='major', labelsize=20)
+ax_TauMin.legend(loc='upper left', fontsize=18)
+
+fig_TauMin.savefig('./AugerVerticalData/TauMin_distribution_histogram_AugerVerticalData.pdf')
