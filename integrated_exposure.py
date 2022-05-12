@@ -13,7 +13,7 @@ def integrated_exposure(theta_min, theta_max, a_cell, time_begin, time_end, time
 
 #values of the maximum and minimum values of theta
 theta_min = math.radians(0)
-theta_max = math.radians(80)
+theta_max = math.radians(60)
 
 #set value of unit cell of array according to distance between stations
 d = 1.5 #in kilometers
@@ -21,17 +21,16 @@ a_cell = .5*math.sqrt(3)*d*d
 
 #set time interval in seconds
 time_begin = Time('2004-01-01T00:00:00', format='fits').gps
-time_end = Time('2016-08-31T23:59:59', format='fits').gps
+time_end = Time('2011-09-30T23:59:59', format='fits').gps
 
 #load station data
-station_data = pd.read_parquet('../input/Hexagons_NoBadStations.parquet', engine='fastparquet')
+station_data = pd.read_parquet('DataSets/Auger_Hexagons/Hexagons_NoBadStations.parquet', engine='fastparquet')
 
 time = station_data['gps_time'].to_numpy()
-#time = station_data.index.to_numpy()
 n5T5 = station_data['n5T5'].to_numpy()
 n6T5 = station_data['n6T5'].to_numpy()
 
 #compute time integrated exposure
-total_exposure = integrated_exposure(theta_min, theta_max, a_cell, time_begin, time_end, time, n5T5 + n6T5)/(365*24*60) #per year per sr per km^2
+total_exposure = integrated_exposure(theta_min, theta_max, a_cell, time_begin, time_end, time, n6T5)/(365*24*60) #per year per sr per km^2
 
 print(total_exposure)

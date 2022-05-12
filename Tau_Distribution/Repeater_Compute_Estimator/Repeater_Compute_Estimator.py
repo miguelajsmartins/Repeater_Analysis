@@ -22,6 +22,7 @@ import os
 from scipy import stats
 from scipy.optimize import curve_fit
 from scipy.stats import chisquare
+from scipy.stats import norm
 
 rc('font',**{'family':'serif','serif':['DejaVu Sans']})
 rc('text', usetex=True)
@@ -30,7 +31,7 @@ plt.rcParams["figure.autolayout"] = True
 #define the gaussian function
 def Gaussian(x, mu, sigma, norm, shift):
 
-    return shift + (norm/math.sqrt(2*math.pi)*sigma)*np.exp(-(x - mu) ** 2 / (2* sigma ** 2))
+    return shift + norm*np.exp(-(x - mu) ** 2 / (2* sigma ** 2))
 
 #define the average distribution of tau for many realizations
 def AverageTauDist(list_of_histograms):
@@ -108,7 +109,6 @@ def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist
     list_of_tau_histograms = []
     list_of_logtau_histograms = []
 
-    #tau_ud_all = []
     #list to hold the estimators
     N_doublets_below_list = []
     tau_min_list = []
@@ -121,7 +121,7 @@ def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist
 
         f = os.path.join(path_to_dir,filename)
 
-        if os.path.isfile(f) and name_of_files in f: # and len(tau_min_list) < 100:
+        if os.path.isfile(f) and name_of_files in f:
 
             df = pd.read_parquet(f, engine='fastparquet')
 
@@ -210,6 +210,56 @@ def LogExpEnvelop(x, rate, x_max):
 
     return math.log(10)*np.power(10,x)*(rate/ (1 - np.exp(-rate*x_max)) )*np.exp(-rate*np.power(10,x))
 
+#defines the incompatibility between distributions
+def Incompatibility(estimator_list_ud, estimator_list_rep, percentile):
+
+    #computes the mean and std of the distribution of UD estimator
+    mean_ud = np.mean(estimator_list_ud)
+    sigma_ud = math.sqrt(np.var(estimator_list_ud))
+
+    quantile = np.quantile(estimator_list_rep, percentile)
+
+    print('Mean of doublets below from UD distribution', mean_ud)
+    print('RMS of doublets below from UD distribution', sigma_ud)
+    print('The q(',percentile,') for the distribution of doublets below for Rep is', quantile)
+
+    return (quantile - mean_ud)/sigma_ud
+
+#defines the incompatibility between distributions
+def IncompatibilityFromGaussianFit(mean_ud, sigma_ud, mean_rep, sigma_rep, percentile):
+
+    quantile = sigma_rep*norm.ppf(percentile) + mean_rep
+
+    print('FROM FIT: The q(',percentile,') for the distribution of doublets below for Rep is', quantile)
+
+    return (quantile - mean_ud)/sigma_ud
+
+#fit estimator distribution
+def FitEstimatorDist(bin_content, bin_edges, estimator_list):
+
+    bin_x = []
+    #centers the bin content
+    for i in range(len(bin_edges)-1):
+        bin_x.append((bin_edges[i+1] + bin_edges[i])/2)
+
+    sigma_data = np.sqrt(bin_content)
+
+    init_parameters = [np.mean(estimator_list), math.sqrt(np.var(estimator_list)), len(estimator_list), 0]
+
+    parameters, covariance = curve_fit(Gaussian, np.array(bin_x), np.array(bin_content), p0=init_parameters) #, sigma = sigma_data, absolute_sigma = True)
+
+    x_gauss_fit = np.arange(min(estimator_list), max(estimator_list), 0.01)
+    y_gauss_fit = Gaussian(x_gauss_fit, *parameters)
+
+    parameters_error = np.sqrt(np.diag(covariance))
+
+    print('Mean = ', parameters[0], '+/-', parameters_error[0])
+    print('Sigma = ', parameters[1], '+/-', parameters_error[1])
+    print('Normalization = ', parameters[2], '+/-', parameters_error[2])
+    print('Vertical Shift = ', parameters[3], '+/-', parameters_error[3])
+
+    return x_gauss_fit, y_gauss_fit, parameters, parameters_error, covariance
+
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Vertical/UD_large_stats'
@@ -285,7 +335,7 @@ log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud = AverageTauDist(list_of_
 log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep = AverageTauDist(list_of_logtau_hist_rep)
 
 ax_tau_log.plot(log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud, label=r'Isotropy')
-ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ hour' % N_ACCEPTED_REP_EVENTS)
+ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ day' % N_ACCEPTED_REP_EVENTS)
 
 #ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
 
@@ -338,7 +388,7 @@ cdf_ud_bin_edges, cdf_ud_content = ComulativeDistHist(log_tau_avg_hist_edges_ud,
 cdf_rep_bin_edges, cdf_rep_content = ComulativeDistHist(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep)
 
 ax_cdf_tau_log.plot(cdf_ud_bin_edges, cdf_ud_content, label=r'Isotropy')
-ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ hour' % N_ACCEPTED_REP_EVENTS)
+ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ day' % N_ACCEPTED_REP_EVENTS)
 
 
 ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
@@ -384,8 +434,19 @@ list_of_p_values = []
 fig_est = plt.figure(figsize=(10,8)) #create figure
 ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
 
-content, bins, _ = ax_est.hist(N_doublets_below_list_ud, bins = max(N_doublets_below_list_ud) - min(N_doublets_below_list_ud), range=[min(N_doublets_below_list_ud), max(N_doublets_below_list_ud)], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = max(N_doublets_below_list_rep) - min(N_doublets_below_list_rep), range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label='Repeater $+$ Isotropic BG')
+content_ud, bins_ud, _ = ax_est.hist(N_doublets_below_list_ud, bins = 40, range=[min(N_doublets_below_list_ud), max(N_doublets_below_list_ud)], alpha=0.5, label='Isotropy')
+content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = 40, range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label='Repeater $+$ Isotropic BG')
+
+#Fit the distribution of estimators for the UD and Rep distributions
+print('\n ###### FIT PARAMETERS #######\n')
+print('UD distribution:')
+x_fit_ud, y_fit_ud, parameters_ud, parameter_error_ud, covariance_ud = FitEstimatorDist(content_ud, bins_ud, N_doublets_below_list_ud)
+
+print('\nRepeater distribution:\n')
+x_fit_rep, y_fit_rep, parameters_rep, parameter_error_rep, covariance_rep = FitEstimatorDist(content_rep, bins_rep, N_doublets_below_list_rep)
+
+ax_est.plot(x_fit_ud, y_fit_ud, color='purple', linewidth=2)
+ax_est.plot(x_fit_rep, y_fit_rep, color='seagreen', linewidth = 2)
 
     #ax_est.axvline(auger_data_estimator, 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
 
@@ -422,7 +483,17 @@ ax_est.legend(loc='upper right', fontsize=18)
 
 fig_est.savefig('./results/Estimator_distribution_histogram_Repeater_%s.pdf' % PERIOD_OF_REP)
 
-print('A 5 sigma excess in our estimator corresponds to', 5*math.sqrt(np.var(N_doublets_below_list_ud)))
+#define the percentile
+percentile_doublets = 0.05
+mean_gauss_ud = parameters_ud[0]
+sigma_gauss_ud = parameters_ud[1]
+
+mean_gauss_rep = parameters_rep[0]
+sigma_gauss_rep = parameters_rep[1]
+
+print('\n')
+print('The deviation from q(', percentile_doublets, ') of the repeater dist. to the mean of the UD dist. is', Incompatibility(N_doublets_below_list_ud, N_doublets_below_list_rep, percentile_doublets), 'sigma')
+print('FROM FIT: The deviation from q(', percentile_doublets, ') of the repeater dist. to the mean of the UD dist. is', IncompatibilityFromGaussianFit(mean_gauss_ud, sigma_gauss_ud, mean_gauss_rep, sigma_gauss_rep, percentile_doublets), 'sigma')
 
 #compute the distribution of tau_min
 #tau_min_p_value = PValueTauMinDist(list_of_ordered_taus_ud, tau_auger)
