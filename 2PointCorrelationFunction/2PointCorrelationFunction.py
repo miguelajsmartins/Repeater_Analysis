@@ -123,7 +123,7 @@ def logLikelihood(avg_bin_content, obs_bin_content):
     return -np.sum(avg_bin_content) + np.sum(obs_bin_content*np.log(avg_bin_content)) - factorial_sum
 
 #set path to dir with uniform dist files
-path_of_uniform_dir = '../DataSets/UD_large_stats/2PointCorrFunc/'
+path_of_uniform_dir = '../DataSets/Vertical/UD_large_stats/2PointCorrFunc/'
 
 #list to hold histograms 2point correlation functions
 list_of_hist_binedges_2pointcorrfunc = []
@@ -156,7 +156,7 @@ avg_bin_content, avg_bin_edges = Average2PointCorrFunction(list_of_hist_binedges
 plt.plot(avg_bin_edges, avg_bin_content, label='Uniform Distribution')
 
 #compute the 2 point correlation function for the file with a point repeater
-path_to_rep_file = '../DataSets/MockData_Repeaters/'
+path_to_rep_file = '../DataSets/Vertical/MockData_Repeaters/'
 repeater_file = 'TimeOrdered_Events_ExponentialRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100.parquet'
 
 #defines the maximum angular seperation
@@ -167,6 +167,7 @@ rep_2pointcorrfunc_2 = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_u
 #print(len(rep_2pointcorrfunc_2))
 
 plt.hist(rep_2pointcorrfunc_2, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
+plt.yscale('log')
 
 #plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
 
