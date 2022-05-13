@@ -262,14 +262,14 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
 
 
 #set path to dir with uniform dist files
-path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Vertical/UD_large_stats'
-path_to_dir_rep = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Vertical/MockData_Repeaters/Repeater_large_stats'
+path_to_dir_ud = '../../DataSets/Vertical/UD_AugerOpenData_stats'
+path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_AugerOpenData_stats'
 
 #list to hold all tau values from all data sets of isotropy. Note that the limits must be given in sidereal days!!
 lower_lim = 0
 upper_lim = 1
 list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, 'Ud_events_with_tau', 200, -3, 4, lower_lim, upper_lim)
-list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, 'Rep_events_with_tau', 200, -3, 4, lower_lim, upper_lim)
+list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, 'REP_VerticalEvents_with_tau', 200, -3, 4, lower_lim, upper_lim)
 
 #tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'Ud_events_with_tau')
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
@@ -279,8 +279,9 @@ list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_mi
 
 #read file with tau values for repeater data
 PERIOD_OF_REP = '86164'
-N_ACCEPTED_REP_EVENTS = '100'
-N_INTENSITY = '5'
+N_ACCEPTED_REP_EVENTS = '12'
+N_INTENSITY = '12'
+N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 #
 # df_repeater = pd.read_parquet(path_to_repeaters + 'Rep_events_with_tau_Period_' + PERIOD_OF_REP + '_TotalEvents_100000_AcceptedRepEvents_' + N_ACCEPTED_REP_EVENTS + '_MaxRepIntensity_' + N_INTENSITY + '.parquet', engine='fastparquet')
 #
@@ -335,7 +336,7 @@ log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud = AverageTauDist(list_of_
 log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep = AverageTauDist(list_of_logtau_hist_rep)
 
 ax_tau_log.plot(log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud, label=r'Isotropy')
-ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ day' % N_ACCEPTED_REP_EVENTS)
+ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
 
@@ -352,7 +353,7 @@ ax_tau_log.set_ylim(1e-2, 1e5)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./results/Average_log10tau_distribution_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_tau_log.savefig('./results/Average_log10tau_distribution_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #--------------------------------------
 # plot of tau distributions
@@ -388,7 +389,7 @@ cdf_ud_bin_edges, cdf_ud_content = ComulativeDistHist(log_tau_avg_hist_edges_ud,
 cdf_rep_bin_edges, cdf_rep_content = ComulativeDistHist(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep)
 
 ax_cdf_tau_log.plot(cdf_ud_bin_edges, cdf_ud_content, label=r'Isotropy')
-ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%s} events from explosion with $1/\lambda = 1$ day' % N_ACCEPTED_REP_EVENTS)
+ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 
 ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
@@ -400,7 +401,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize = 18)
 
-fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #list with the integration limits given in sidereal days!!!!!
 #list_of_integration_lims = [0,1]
@@ -435,7 +436,7 @@ fig_est = plt.figure(figsize=(10,8)) #create figure
 ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
 
 content_ud, bins_ud, _ = ax_est.hist(N_doublets_below_list_ud, bins = 40, range=[min(N_doublets_below_list_ud), max(N_doublets_below_list_ud)], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = 40, range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label='Repeater $+$ Isotropic BG')
+content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = 40, range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #Fit the distribution of estimators for the UD and Rep distributions
 print('\n ###### FIT PARAMETERS #######\n')
@@ -481,7 +482,7 @@ ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
 
-fig_est.savefig('./results/Estimator_distribution_histogram_Repeater_%s.pdf' % PERIOD_OF_REP)
+fig_est.savefig('./results/Estimator_distribution_histogram_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #define the percentile
 percentile_doublets = 0.05
@@ -503,7 +504,7 @@ fig_TauMin = plt.figure(figsize=(10,8)) #create figure
 ax_TauMin = fig_TauMin.add_subplot(111) #create subplot with a set of axis with
 
 content, bins, _ = ax_TauMin.hist(tau_min_list_ud, bins = 50, range=[-7, -1], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7,-1], alpha=0.5, label='Repeater + Isotropic BG')
+content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7,-1], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #ax_TauMin.axvline(np.log10(tau_min_auger), 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
 
@@ -515,4 +516,4 @@ ax_TauMin.set_ylabel(r'Arb. units', fontsize=20)
 ax_TauMin.tick_params(axis='both', which='major', labelsize=20)
 ax_TauMin.legend(loc='upper left', fontsize=18)
 
-fig_TauMin.savefig('./results/TauMin_distribution_histogram_Repeater_%s.pdf' % PERIOD_OF_REP)
+fig_TauMin.savefig('./results/TauMin_distribution_histogram_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
