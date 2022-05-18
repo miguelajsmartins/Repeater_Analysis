@@ -1,3 +1,9 @@
 ./SkyMaps/*.pdf
 
-./DataSets
+./DataSets/Inclined/*.parquet
+./DataSets/Vertical/UD_AugerOpenData_stats/*.parquet
+./DataSets/Vertical/UD_large_stats/*.parquet
+./DataSets/Vertical/MockData_Repeaters/*.parquet
+./DataSets/Vertical/MockData_Repeaters/Repeater_RandPosAndDate_Catalog_AugerOpenData_stats/*.parquet
+./DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats/*.parquet
+./DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_AugerOpenData_stats/*.parquet

@@ -263,7 +263,7 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '../../DataSets/Vertical/UD_AugerOpenData_stats'
-path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_AugerOpenData_stats'
+path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_RandPosAndDate_Catalog_AugerOpenData_stats'
 
 #list to hold all tau values from all data sets of isotropy. Note that the limits must be given in sidereal days!!
 lower_lim = 0
@@ -280,7 +280,7 @@ list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_mi
 #read file with tau values for repeater data
 PERIOD_OF_REP = '86164'
 N_ACCEPTED_REP_EVENTS = '12'
-N_INTENSITY = '12'
+N_INTENSITY = '2'
 N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 #
 # df_repeater = pd.read_parquet(path_to_repeaters + 'Rep_events_with_tau_Period_' + PERIOD_OF_REP + '_TotalEvents_100000_AcceptedRepEvents_' + N_ACCEPTED_REP_EVENTS + '_MaxRepIntensity_' + N_INTENSITY + '.parquet', engine='fastparquet')
@@ -353,7 +353,7 @@ ax_tau_log.set_ylim(1e-2, 1e5)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./results/Average_log10tau_distribution_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_tau_log.savefig('./results/Average_log10tau_distribution_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #--------------------------------------
 # plot of tau distributions
@@ -401,7 +401,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize = 18)
 
-fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #list with the integration limits given in sidereal days!!!!!
 #list_of_integration_lims = [0,1]
@@ -483,7 +483,7 @@ ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
 
-fig_est.savefig('./results/Estimator_distribution_histogram_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_est.savefig('./results/Estimator_distribution_histogram_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
 
 #define the percentile
 percentile_doublets = 0.05
@@ -517,4 +517,4 @@ ax_TauMin.set_ylabel(r'Arb. units', fontsize=20)
 ax_TauMin.tick_params(axis='both', which='major', labelsize=20)
 ax_TauMin.legend(loc='upper left', fontsize=18)
 
-fig_TauMin.savefig('./results/TauMin_distribution_histogram_FixedPosAndDate_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_TauMin.savefig('./results/TauMin_distribution_histogram_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
