@@ -263,13 +263,24 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '../../DataSets/Vertical/UD_AugerOpenData_stats'
-path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_RandPosAndDate_Catalog_AugerOpenData_stats'
+path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_AugerOpenData_stats'
 
 #list to hold all tau values from all data sets of isotropy. Note that the limits must be given in sidereal days!!
 lower_lim = 0
-upper_lim = 1
-list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, 'Ud_events_with_tau', 200, -3, 4, lower_lim, upper_lim)
-list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, 'REP_VerticalEvents_with_tau', 200, -3, 4, lower_lim, upper_lim)
+upper_lim = 2
+
+#read file with tau values for repeater data
+PERIOD_OF_REP = '86164'
+REP_DATE = 'Date_2015-01-01T06:00:00'
+N_ACCEPTED_REP_EVENTS = '12'
+N_INTENSITY = '12'
+N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
+
+#files with tau distributions
+tau_files_ud = 'Ud_events_with_tau'
+tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_13068_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
+list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, lower_lim, upper_lim)
+list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, lower_lim, upper_lim)
 
 #tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'Ud_events_with_tau')
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
@@ -277,11 +288,7 @@ list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_mi
 #list_of_log_tau_arrays_ud = [np.log10(tau) for tau in list_of_ordered_taus_ud]
 #list_of_log_tau_arrays_rep = [np.log10(tau) for tau in list_of_ordered_taus_rep]
 
-#read file with tau values for repeater data
-PERIOD_OF_REP = '86164'
-N_ACCEPTED_REP_EVENTS = '12'
-N_INTENSITY = '2'
-N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
+
 #
 # df_repeater = pd.read_parquet(path_to_repeaters + 'Rep_events_with_tau_Period_' + PERIOD_OF_REP + '_TotalEvents_100000_AcceptedRepEvents_' + N_ACCEPTED_REP_EVENTS + '_MaxRepIntensity_' + N_INTENSITY + '.parquet', engine='fastparquet')
 #
@@ -349,11 +356,11 @@ ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{ 1 sidereal day})$', fontsize =
 ax_tau_log.set_ylabel(r'Number of pairs', fontsize=20)
 ax_tau_log.tick_params(axis='both', which='major', labelsize=20)
 ax_tau_log.set_yscale('log')
-ax_tau_log.set_ylim(1e-2, 1e5)
+ax_tau_log.set_ylim(1e-2, 1e3)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./results/Average_log10tau_distribution_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_tau_log.savefig('./results/Average_log10tau_distribution_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
 #--------------------------------------
 # plot of tau distributions
@@ -401,7 +408,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize = 18)
 
-fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
 #list with the integration limits given in sidereal days!!!!!
 #list_of_integration_lims = [0,1]
@@ -482,8 +489,9 @@ ax_est.set_xlabel(r'$\hat{N}(%.0f < \tau < %.0f$ days)' % (lower_lim, upper_lim)
 ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
+ax_est.set_ylim(0,250)
 
-fig_est.savefig('./results/Estimator_distribution_histogram_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_est.savefig('./results/Estimator_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
 #define the percentile
 percentile_doublets = 0.05
@@ -504,8 +512,8 @@ print('FROM FIT: The deviation from q(', percentile_doublets, ') of the repeater
 fig_TauMin = plt.figure(figsize=(10,8)) #create figure
 ax_TauMin = fig_TauMin.add_subplot(111) #create subplot with a set of axis with
 
-content, bins, _ = ax_TauMin.hist(tau_min_list_ud, bins = 50, range=[-7, -1], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7,-1], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+content, bins, _ = ax_TauMin.hist(tau_min_list_ud, bins = 50, range=[-5, 1], alpha=0.5, label='Isotropy')
+content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-5,1], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #ax_TauMin.axvline(np.log10(tau_min_auger), 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
 
@@ -514,7 +522,8 @@ content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7
 ax_TauMin.set_title(r'$\log_{10}(\tau_{\min})$ distribution', fontsize=24)
 ax_TauMin.set_xlabel(r'$\log_{10}(\tau_{\min} / 1\textrm{ sideral day}) $', fontsize=20)
 ax_TauMin.set_ylabel(r'Arb. units', fontsize=20)
+ax_TauMin.set_ylim(0, 120)
 ax_TauMin.tick_params(axis='both', which='major', labelsize=20)
 ax_TauMin.legend(loc='upper left', fontsize=18)
 
-fig_TauMin.savefig('./results/TauMin_distribution_histogram_RandPosAndDate_Catalog_RepPeriod_%s.pdf' % PERIOD_OF_REP)
+fig_TauMin.savefig('./results/TauMin_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
