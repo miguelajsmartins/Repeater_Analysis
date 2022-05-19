@@ -271,7 +271,7 @@ upper_lim = 2
 
 #read file with tau values for repeater data
 PERIOD_OF_REP = '86164'
-REP_DATE = 'Date_2015-01-01T06:00:00'
+REP_DATE = 'Date_2015-01-01T00:00:00_Pos_30_20'
 N_ACCEPTED_REP_EVENTS = '12'
 N_INTENSITY = '12'
 N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
