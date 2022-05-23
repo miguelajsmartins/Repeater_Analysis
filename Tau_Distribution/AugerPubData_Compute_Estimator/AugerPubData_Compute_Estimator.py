@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib import rc
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, InsetPosition
 
 #for data manipulation
 import pandas as pd
@@ -214,21 +214,21 @@ ks_stat_value, ks_p_value = stats.kstest(tau_auger, tau_ud_all)
 fig_tau_log = plt.figure(figsize=(10,8)) #create figure
 ax_tau_log = fig_tau_log.add_subplot(111) #create subplot with a set of axis with
 
-ax_tau_log.hist(np.log10(tau_auger), bins=200, range=[-2,4], alpha = 0.5, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
+ax_tau_log.hist(np.log10(tau_auger), bins=200, range=[-3,4], alpha = 0.5, label=r'Auger Data: $N_{\textrm{evt}} = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
 
-log_tau_avg_hist_edges, log_tau_avg_hist_content = AverageTauDist(list_of_log_tau_arrays, 200, -2, 4)
+log_tau_avg_hist_edges, log_tau_avg_hist_content = AverageTauDist(list_of_log_tau_arrays, 200, -3, 4)
 
 ax_tau_log.plot(log_tau_avg_hist_edges, log_tau_avg_hist_content, label=r'Isotropy')
-ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
+#ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
 
-#ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
+ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.2f}' % ks_p_value)
 
 ax_tau_log.set_title(r'$\log_{10}(\tau)$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
-ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{sidereal days})$', fontsize=20)
+ax_tau_log.set_xlabel(r'$\log_{10}(\tau/ \textrm{ 1 sidereal day})$', fontsize=20)
 ax_tau_log.set_ylabel(r'Number of pairs', fontsize=20)
 ax_tau_log.tick_params(axis='both', which='major', labelsize=20)
 ax_tau_log.set_yscale('log')
-ax_tau_log.set_ylim(1e-2, 1e4)
+ax_tau_log.set_ylim(1e-3, 1e3)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
@@ -237,26 +237,44 @@ fig_tau_log.savefig('./AugerVerticalData/Average_log10tau_distribution_AugerVert
 #--------------------------------------
 # plot of tau distributions
 #--------------------------------------
-# fig_tau = plt.figure(figsize=(10,8)) #create figure
-# ax_tau = fig_tau.add_subplot(111) #create subplot with a set of axis with
-#
-# ax_tau.hist(tau_auger,bins=200, range=[0,10], alpha = 0.5, label=r'Isotropy + ' + N_ACCEPTED_REP_EVENTS + r' events from repeater w/ $\tau = 1$ hour')
-#
-# tau_avg_hist_edges, tau_avg_hist_content = AverageTauDist(list_of_ordered_taus_ud, 200, 0, 10)
-#
-# ax_tau.plot(tau_avg_hist_edges, tau_avg_hist_content, label=r'Isotropy')
-#
-# ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = 1^\circ$',fontsize=24)
-# ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize=20)
-# ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
-# ax_tau.tick_params(axis='both', which='major', labelsize=20)
-# ax_tau.set_xlim([0,10])
-# ax_tau.set_yscale('log')
-# ax_tau.set_ylim(1e-1,5e2)
-#
-# ax_tau.legend(loc='upper right', fontsize=18)
-#
-# fig_tau.savefig('./results/Average_tau_distribution_wRepeater_RandPos_' + PERIOD_OF_REP + '.pdf')
+fig_tau = plt.figure(figsize=(10,8)) #create figure
+ax_tau = fig_tau.add_subplot(111) #create subplot with a set of axis with
+
+ax_tau.hist(tau_auger, bins=200, range=[0,6000], alpha = 0.5, label=r'Auger Data: $N = {%i}$, ${%.0f}^\circ < \theta < {%.0f}^\circ$' % (N_events, theta_min, theta_max))
+
+tau_avg_hist_edges, tau_avg_hist_content = AverageTauDist(list_of_ordered_taus_ud, 200, 0, 6000)
+
+ax_tau.plot(tau_avg_hist_edges, tau_avg_hist_content, label=r'Isotropy')
+
+ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize=20)
+ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
+ax_tau.tick_params(axis='both', which='major', labelsize=20)
+ax_tau.set_xlim([0,6000])
+ax_tau.set_yscale('log')
+ax_tau.set_ylim(5e-1,1e3)
+
+ax_tau.legend(loc='upper left', fontsize=18)
+
+#for inset
+ax_tau_inset = fig_tau.add_axes([0,0,1,1])
+inset_pos = InsetPosition(ax_tau, [0.6,0.5,0.37,0.4])
+ax_tau_inset.set_axes_locator(inset_pos)
+
+ax_tau_inset.hist(tau_auger, bins=100, range=[0,10], alpha = 0.5)
+
+tau_avg_hist_edges_inset, tau_avg_hist_content_inset = AverageTauDist(list_of_ordered_taus_ud, 100, 0, 10)
+
+ax_tau_inset.plot(tau_avg_hist_edges_inset, tau_avg_hist_content_inset)
+
+ax_tau_inset.set_xlabel(r'$\tau$ (sidereal days)', fontsize=16)
+ax_tau_inset.set_ylabel(r'Number of pairs', fontsize=16)
+ax_tau_inset.tick_params(axis='both', which='major', labelsize=16)
+ax_tau_inset.set_xlim([0,10])
+#ax_tau.set_yscale('log')
+#ax_tau_inset.set_ylim(1e-2,1e2)
+
+fig_tau.savefig('./AugerVerticalData/Average_tau_distribution_AugerVerticalData.pdf')
 #
 #---------------------------------------
 # plot of cdf of log tau
@@ -313,10 +331,10 @@ for i in range(1,len(list_of_integration_lims)):
     fig_est = plt.figure(figsize=(10,8)) #create figure
     ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
 
-    content, bins, _ = ax_est.hist(estimator_list, bins = max(estimator_list) - min(estimator_list), range=[min(estimator_list), max(estimator_list)], alpha=0.5, label='Uniform distribution')
+    content, bins, _ = ax_est.hist(estimator_list, bins = max(estimator_list) - min(estimator_list), range=[min(estimator_list), max(estimator_list)], alpha=0.7, color = 'tab:orange', label='Isotropy')
     #content_rep, bins_rep, _ = ax_est.hist(estimator_list_rep, bins = max(estimator_list_rep) - min(estimator_list_rep), range=[min(estimator_list_rep), max(estimator_list_rep)], alpha=0.5, label='Repeater distribution')
 
-    ax_est.axvline(auger_data_estimator, 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
+    ax_est.axvline(auger_data_estimator, 0, max(content), linestyle = 'dashed', color = 'tab:blue', label=r'Auger data')
 
     #fit the distribution of the estimator
     #sigma_data = np.sqrt(content)
