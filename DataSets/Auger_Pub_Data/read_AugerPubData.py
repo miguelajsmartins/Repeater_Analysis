@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 
 from astropy.time import Time
 
-auger_data = pd.read_parquet('AugerOpenData_AllEventsWithCuts.parquet', engine = 'fastparquet')
+auger_data = pd.read_parquet('AugerOpenData_InclinedEvents_eFit.parquet', engine = 'fastparquet')
 
-timestamp = auger_data['gpstime'].to_numpy()
+timestamp = auger_data['sd_gpstime'].to_numpy()
 energy = auger_data['sd_energy'].to_numpy()
 #energy_error = auger_data['sd_denergy'].to_numpy()
 #n19 = auger_data['sd_n19'].to_numpy()

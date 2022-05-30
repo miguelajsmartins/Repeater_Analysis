@@ -148,14 +148,14 @@ def LogExpEnvelop(x, rate, x_max):
     return math.log(10)*np.power(10,x)*(rate/ (1 - np.exp(-rate*x_max)) )*np.exp(-rate*np.power(10,x))
 
 #set path to dir with uniform dist files
-path_to_dir_ud = '/home/miguel/Documents/Repeaters_Analysis/DataSets/Vertical/UD_AugerOpenData_stats'
+path_to_dir_ud = '../../DataSets/Inclined/UD_AugerOpenData_stats'
 #path_to_dir_rep = '/home/miguelm/Documents/Anisotropies/Repeater_Analysis/DataSets/MockData_Repeaters/Rep_large_stats/'
 
 #define tau threshold in log10(tau) with tau in days
 tau_th = -0.5
 
 #list to hold all tau values from all data sets of isotropy
-tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'Ud_events_with_tau')
+tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'UD_InclinedEvents_with_tau')
 
 #tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
 
@@ -176,8 +176,8 @@ list_of_log_tau_arrays = [np.log10(tau) for tau in list_of_ordered_taus_ud]
 # store the tau distribution from auger data and saves important info from the selection info file
 #----------------------
 path_to_auger_data = '../results/'
-auger_data_file = 'AugerOpenData_VerticalEvents_with_tau.parquet'
-auger_selection_file = 'AugerOpenData_VerticalEvents_SelectionInfo.parquet'
+auger_data_file = 'AugerOpenData_InclinedEvents_with_tau.parquet'
+auger_selection_file = 'AugerOpenData_InclinedEvents_SelectionInfo.parquet'
 
 auger_data = pd.read_parquet(path_to_auger_data + auger_data_file, engine='fastparquet')
 auger_selection_info = pd.read_parquet(path_to_auger_data + auger_selection_file, engine='fastparquet')
@@ -232,7 +232,7 @@ ax_tau_log.set_ylim(1e-3, 1e3)
 
 ax_tau_log.legend(loc='best', fontsize=18)
 
-fig_tau_log.savefig('./AugerVerticalData/Average_log10tau_distribution_AugerVerticalData.pdf')
+fig_tau_log.savefig('./AugerInclinedData/Average_log10tau_distribution_AugerInclinedData.pdf')
 
 #--------------------------------------
 # plot of tau distributions
@@ -274,7 +274,7 @@ ax_tau_inset.set_xlim([0,10])
 #ax_tau.set_yscale('log')
 #ax_tau_inset.set_ylim(1e-2,1e2)
 
-fig_tau.savefig('./AugerVerticalData/Average_tau_distribution_AugerVerticalData.pdf')
+fig_tau.savefig('./AugerInclinedData/Average_tau_distribution_AugerInclinedData.pdf')
 #
 #---------------------------------------
 # plot of cdf of log tau
@@ -297,7 +297,7 @@ ax_cdf_tau_log.set_yscale('log')
 
 ax_cdf_tau_log.legend(loc='best', fontsize=18)
 
-fig_cdf_tau_log.savefig('./AugerVerticalData/Average_log10tau_CDF_AugerVerticalData.pdf')
+fig_cdf_tau_log.savefig('./AugerInclinedData/Average_log10tau_CDF_AugerInclinedData.pdf')
 
 #list with the integration limits given in sidereal days!!!!!
 list_of_integration_lims = [0,1]
@@ -367,7 +367,7 @@ for i in range(1,len(list_of_integration_lims)):
     ax_est.tick_params(axis='both', which='major', labelsize=20)
     ax_est.legend(loc='upper right', fontsize=18)
 
-    fig_est.savefig('./AugerVerticalData/Estimator_distribution_histogram_AugerVerticalData.pdf')
+    fig_est.savefig('./AugerInclinedData/Estimator_distribution_histogram_AugerInclinedData.pdf')
 
     print('A 5 sigma excess in our estimator corresponds to', 5*math.sqrt(np.var(estimator_list)))
 
@@ -391,4 +391,4 @@ ax_TauMin.set_ylabel(r'Arb. units', fontsize=20)
 ax_TauMin.tick_params(axis='both', which='major', labelsize=20)
 ax_TauMin.legend(loc='upper left', fontsize=18)
 
-fig_TauMin.savefig('./AugerVerticalData/TauMin_distribution_histogram_AugerVerticalData.pdf')
+fig_TauMin.savefig('./AugerInclinedData/TauMin_distribution_histogram_AugerInclinedData.pdf')
