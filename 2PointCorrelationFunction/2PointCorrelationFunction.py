@@ -156,17 +156,17 @@ avg_bin_content, avg_bin_edges = Average2PointCorrFunction(list_of_hist_binedges
 plt.plot(avg_bin_edges, avg_bin_content, label='Uniform Distribution')
 
 #compute the 2 point correlation function for the file with a point repeater
-path_to_rep_file = '../DataSets/Vertical/MockData_Repeaters/'
-repeater_file = 'TimeOrdered_Events_ExponentialRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100.parquet'
+path_to_rep_file = '../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats/'
+repeater_file = 'ExpRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100_3834357_1.parquet'
 
 #defines the maximum angular seperation
 max_ang_sep = math.pi/4
 
-rep_2pointcorrfunc_2 = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', max_ang_sep, 10000)
+rep_2pointcorrfunc = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', max_ang_sep, 10000)
 
 #print(len(rep_2pointcorrfunc_2))
 
-plt.hist(rep_2pointcorrfunc_2, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
+plt.hist(rep_2pointcorrfunc, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
 plt.yscale('log')
 
 #plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
