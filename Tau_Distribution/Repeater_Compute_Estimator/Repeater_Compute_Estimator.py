@@ -97,7 +97,7 @@ def FromFiles_to_TauDist(path_to_dir, name_of_files):
     return tau_ud_all, list_of_ordered_tau_arrays
 
 #to get list of ordered taus and list with all taus from files
-def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist_max, lower_lim, upper_lim):
+def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins_log, hist_min_log, hist_max_log, nbins, hist_min, hist_max, lower_lim, upper_lim):
 
     #lists to hold the histograms with tau distributions
     list_of_tau_histograms = []
@@ -122,8 +122,8 @@ def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist
             tau_array = np.divide(df["tau (s)"].to_numpy(), 86164)
 
             #lists to hold the histograms
-            list_of_tau_histograms.append(np.histogram(tau_array, nbins, range=[math.pow(10,hist_min), math.pow(10,hist_max)]))
-            list_of_logtau_histograms.append(np.histogram(np.log10(tau_array), nbins, range=[hist_min, hist_max]))
+            list_of_tau_histograms.append(np.histogram(tau_array, nbins, range=[hist_min, hist_max]))
+            list_of_logtau_histograms.append(np.histogram(np.log10(tau_array), nbins_log, range=[hist_min_log, hist_max_log]))
 
             #lists with the estimators
             N_doublets_below_list.append(len([tau for tau in tau_array if tau > lower_lim and tau < upper_lim]))
@@ -274,52 +274,8 @@ N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 #files with tau distributions
 tau_files_ud = 'Ud_events_with_tau'
 tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
-list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, lower_lim, upper_lim)
-list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, lower_lim, upper_lim)
-
-#tau_ud_all, list_of_ordered_taus_ud = FromFiles_to_TauDist(path_to_dir_ud, 'Ud_events_with_tau')
-#tau_rep_all, list_of_ordered_taus_rep = FromFiles_to_TauDist(path_to_dir_rep, 'Rep_events_with_tau')
-
-#list_of_log_tau_arrays_ud = [np.log10(tau) for tau in list_of_ordered_taus_ud]
-#list_of_log_tau_arrays_rep = [np.log10(tau) for tau in list_of_ordered_taus_rep]
-
-
-#
-# df_repeater = pd.read_parquet(path_to_repeaters + 'Rep_events_with_tau_Period_' + PERIOD_OF_REP + '_TotalEvents_100000_AcceptedRepEvents_' + N_ACCEPTED_REP_EVENTS + '_MaxRepIntensity_' + N_INTENSITY + '.parquet', engine='fastparquet')
-#
-# #store tau values in sidereal days
-# tau_repeater = np.divide(df_repeater["tau (s)"].to_numpy(),86164)
-
-#----------------------
-# store the tau distribution from auger data and saves important info from the selection info file
-#----------------------
-# path_to_auger_data = '../results/'
-# auger_data_file = 'AugerOpenData_VerticalEvents_with_tau.parquet'
-# auger_selection_file = 'AugerOpenData_VerticalEvents_SelectionInfo.parquet'
-#
-# auger_data = pd.read_parquet(path_to_auger_data + auger_data_file, engine='fastparquet')
-# auger_selection_info = pd.read_parquet(path_to_auger_data + auger_selection_file, engine='fastparquet')
-#
-# #store tau values in sidereal days
-# tau_auger = np.divide(auger_data["tau (s)"].to_numpy(), 86164)
-#
-# #stores important info from auger selection info file
-# N_events = int(auger_selection_info.iloc[0]['N_events'])
-# theta_min = float(auger_selection_info.iloc[0]['Theta_min'])
-# theta_max = float(auger_selection_info.iloc[0]['Theta_max'])
-# ang_window = math.degrees(float(auger_selection_info.iloc[0]['Ang_window']))
-# t_begin = Time(auger_selection_info.iloc[0]['t_begin'], format='fits').gps
-# t_end = Time(auger_selection_info.iloc[0]['t_end'], format = 'fits').gps
-#
-# #computes the average rate of events in events per sidereal day
-# lat_auger = -35.28
-# teo_average_rate = 86164 * N_events/(t_end - t_begin) * (1 - math.cos(math.radians(ang_window)))/(1 + math.sin(math.radians(theta_max - lat_auger)))
-# auger_avg_rate = 1 / np.mean(tau_auger)
-# ud_avg_rate = 1 / np.mean(tau_ud_all)
-#
-# print('Average rate', teo_average_rate)
-# print('Rate from mean auger tau', auger_avg_rate)
-# print('Rate from mean uniform dist tau', ud_avg_rate)
+list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, 300, 0, 5, lower_lim, upper_lim)
+list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, 300, 0, 5, lower_lim, upper_lim)
 
 #---------------------------------------
 # To plot histograms of tau distribution
@@ -340,9 +296,6 @@ log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep = AverageTauDist(list_o
 ax_tau_log.plot(log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud, label=r'Isotropy')
 ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
-#ax_tau_log.plot(np.arange(-2,5,0.01), 1000*LogExpEnvelop(np.arange(-2,5,0.01), 5*ud_avg_rate, (t_end - t_begin) / 86164 ), color = 'purple', linestyle='--', label=r'Exponential Envelop',)
-
-#ax_tau_log.plot([],[],lw=0,label=r'KS test: $p$-value = {%.10f}' % ks_p_value)
 
 #---------- CHANGE THIIIIIISSSSSSSSS ---------------------
 ang_window = 1 #<--------------
@@ -360,26 +313,26 @@ fig_tau_log.savefig('./results/Average_log10tau_distribution_%s_RepPeriod_%s_Tot
 #--------------------------------------
 # plot of tau distributions
 #--------------------------------------
-# fig_tau = plt.figure(figsize=(10,8)) #create figure
-# ax_tau = fig_tau.add_subplot(111) #create subplot with a set of axis with
-#
-# ax_tau.hist(tau_auger,bins=200, range=[0,10], alpha = 0.5, label=r'Isotropy + ' + N_ACCEPTED_REP_EVENTS + r' events from repeater w/ $\tau = 1$ hour')
-#
-# tau_avg_hist_edges, tau_avg_hist_content = AverageTauDist(list_of_ordered_taus_ud, 200, 0, 10)
-#
-# ax_tau.plot(tau_avg_hist_edges, tau_avg_hist_content, label=r'Isotropy')
-#
-# ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = 1^\circ$',fontsize=24)
-# ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize=20)
-# ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
-# ax_tau.tick_params(axis='both', which='major', labelsize=20)
-# ax_tau.set_xlim([0,10])
-# ax_tau.set_yscale('log')
-# ax_tau.set_ylim(1e-1,5e2)
-#
-# ax_tau.legend(loc='upper right', fontsize=18)
-#
-# fig_tau.savefig('./results/Average_tau_distribution_wRepeater_RandPos_' + PERIOD_OF_REP + '.pdf')
+fig_tau = plt.figure(figsize=(10,8)) #create figure
+ax_tau = fig_tau.add_subplot(111) #create subplot with a set of axis with
+
+tau_avg_hist_edges_ud, tau_avg_hist_content_ud = AverageTauDist(list_of_tau_hist_ud)
+tau_avg_hist_edges_rep, tau_avg_hist_content_rep = AverageTauDist(list_of_tau_hist_rep)
+
+ax_tau.plot(tau_avg_hist_edges_ud, tau_avg_hist_content_ud, label=r'Isotropy')
+ax_tau.plot(tau_avg_hist_edges_rep, tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+
+ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
+ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize = 20)
+ax_tau.set_ylabel(r'Number of pairs', fontsize=20)
+ax_tau.tick_params(axis='both', which='major', labelsize=20)
+ax_tau.set_yscale('log')
+#ax_tau.set_ylim(1e-2, 1e5)
+
+ax_tau.legend(loc='best', fontsize=18)
+
+fig_tau.savefig('./results/Average_tau_distribution_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
+
 #
 #---------------------------------------
 # plot of cdf of log tau
