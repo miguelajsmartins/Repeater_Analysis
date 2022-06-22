@@ -97,11 +97,7 @@ def FromFiles_to_TauDist(path_to_dir, name_of_files):
     return tau_ud_all, list_of_ordered_tau_arrays
 
 #to get list of ordered taus and list with all taus from files
-<<<<<<< HEAD
-def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins_log, hist_min_log, hist_max_log, nbins, hist_min, hist_max, lower_lim, upper_lim):
-=======
-def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist_max, lower_tau, upper_tau):
->>>>>>> 8c955cb6d1c28bc3cb8d25d84f246c808744ff93
+def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist_max, nbins_log, hist_min_log, hist_max_log, lower_tau, upper_tau):
 
     #lists to hold the histograms with tau distributions
     list_of_tau_histograms = []
@@ -301,13 +297,9 @@ N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 #files with tau distributions
 tau_files_ud = 'Ud_events_with_tau'
 tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
-<<<<<<< HEAD
-list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, 300, 0, 5, lower_lim, upper_lim)
-list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, 300, 0, 5, lower_lim, upper_lim)
-=======
-list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, lower_tau, upper_tau)
-list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, lower_tau, upper_tau)
->>>>>>> 8c955cb6d1c28bc3cb8d25d84f246c808744ff93
+
+list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, 300, 0, 5, lower_tau, upper_tau)
+list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, 300, 0, 5, lower_tau, upper_tau)
 
 #---------------------------------------
 # To plot histograms of tau distribution
@@ -365,7 +357,6 @@ ax_tau.legend(loc='best', fontsize=18)
 
 fig_tau.savefig('./results/Average_tau_distribution_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
-#
 #---------------------------------------
 # plot of cdf of log tau
 #---------------------------------------
@@ -454,7 +445,6 @@ fig_TauMin.savefig('./results/TauMin_distribution_histogram_%s_RepPeriod_%s_Tota
 #----------------------------------------------------
 # plot the distribution of likelihoods
 #----------------------------------------------------
-
 log_likelihood_ud = []
 log_likelihood_rep = []
 
