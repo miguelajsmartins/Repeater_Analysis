@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import healpy as hp
 
 #for plotting
 import matplotlib.pyplot as plt
@@ -103,9 +102,13 @@ def Get2PointCorrFunc(filename, col_alpha, col_delta, col_gpstime, max_ang_sep, 
     return np.degrees(list_of_dot_prod_no_reps)
 
 #read the two point correlation function for the ensemble of uniformly distributed events
-def Read2PointCorrFunc(filename):
+def Read2PointCorrFunc(filename, max_sep):
 
     corrfunc = pd.read_parquet(filename, engine='fastparquet')
+
+    corrfunc = corrfunc[corrfunc['2pointcorr_bin_edges'] <= max_sep]
+
+    print(corrfunc.head())
 
     bin_edges = corrfunc['2pointcorr_bin_edges'].to_numpy()
     bin_contents = corrfunc['2pointcorr_bin_content'].to_numpy()
@@ -115,13 +118,54 @@ def Read2PointCorrFunc(filename):
 #define the log likelihood function
 def logLikelihood(avg_bin_content, obs_bin_content):
 
-    factorial_sum = 0
+    log_obs_factorial = []
+    factorial_sum = []
 
     for obs in obs_bin_content:
-        factorial_sum+=math.log(math.factorial(obs))
+        for j in range(1, int(obs)+1):
+            log_obs_factorial.append(math.log(j))
 
-    return -np.sum(avg_bin_content) + np.sum(obs_bin_content*np.log(avg_bin_content)) - factorial_sum
+        factorial_sum.append(sum(log_obs_factorial))
 
+    return -np.sum(avg_bin_content) + np.sum(obs_bin_content*np.log(avg_bin_content)) - sum(factorial_sum)
+
+#defines the incompatibility between distributions
+def Incompatibility(likelihood_list_ud, likelihood_list_rep, percentile):
+
+    #computes the mean and std of the distribution of likelihood for Isotropic dist.
+    mean_ud = np.mean(estimator_list_ud)
+    sigma_ud = math.sqrt(np.var(estimator_list_ud))
+
+    quantile = np.quantile(estimator_list_rep, percentile)
+
+    print('Mean of test statistic for UD distribution', mean_ud)
+    print('RMS of test statistic for UD distribution', sigma_ud)
+    print('The q(',percentile,') for the distribution of TS for Repeater samples is', quantile)
+
+    return (quantile - mean_ud)/sigma_ud
+
+#computes the distribution of the estimator
+# def Estimator(list_obs_bin_edges, list_obs_bin_contents, max_ang_sep):
+#
+#     #estimator distribution for the many isotropic realizations
+#     estimator_list = []
+#
+#     for i in range(len(list_obs_bin_edges)):
+#
+#         estimator = 0
+#
+#         iter = 0
+#
+#         while obs_bin_edges[iter] < max_ang_sep:
+#             estimator+=obs_bin_content[i]
+#
+#         estimator_list.append(estimator)
+#
+#     return estimator_list
+
+#------------------------------------------
+# main function
+#------------------------------------------
 #set path to dir with uniform dist files
 path_of_uniform_dir = '../DataSets/Vertical/UD_large_stats/2PointCorrFunc/'
 
@@ -129,50 +173,109 @@ path_of_uniform_dir = '../DataSets/Vertical/UD_large_stats/2PointCorrFunc/'
 list_of_hist_binedges_2pointcorrfunc = []
 list_of_hist_contents_2pointcorrfunc = []
 
+#sets maximum angular separation for 2-point corr. func. in degrees!
+max_sep = 5 #degree
+ang_window = 1 #degree
+
+#initializes the number of pairs below
+number_of_pairs_below = []
+
 for file in os.listdir(path_of_uniform_dir):
 
     filename = os.path.join(path_of_uniform_dir,file)
 
-    if os.path.isfile(filename) and '2PointCorrelationFunction_N_' in filename:
+    if os.path.isfile(filename) and '2PointCorrelationFunction_N_' in filename and len(number_of_pairs_below) < 10:
 
         begin_task = datetime.now()
 
-        bin_edges, bin_contents = Read2PointCorrFunc(filename)
+        bin_edges, bin_contents = Read2PointCorrFunc(filename, max_sep)
 
         list_of_hist_binedges_2pointcorrfunc.append(bin_edges)
         list_of_hist_contents_2pointcorrfunc.append(bin_contents)
+
+        number_of_pairs_scalar = sum([bin_contents[i] for i in range(len(bin_contents)) if bin_edges[i] <= ang_window])
+        number_of_pairs_below.append(int(number_of_pairs_scalar))
 
         print('This took', datetime.now() - begin_task)
 
 avg_bin_content, avg_bin_edges = Average2PointCorrFunction(list_of_hist_binedges_2pointcorrfunc, list_of_hist_contents_2pointcorrfunc)
 
+print(min(avg_bin_edges), max(avg_bin_edges))
+
 #compute the likelihood distribution
-#log_likelihood = []
+log_likelihood = []
 
-#for corr_func_bin_content in list_of_hist_contents_2pointcorrfunc:
+for corr_func_bin_content in list_of_hist_contents_2pointcorrfunc:
 
-    #log_likelihood.append(logLikelihood(avg_bin_content, corr_func_bin_content))
+    log_likelihood.append(logLikelihood(avg_bin_content, corr_func_bin_content))
+    print(len(log_likelihood),' samples done!')
 
-plt.plot(avg_bin_edges, avg_bin_content, label='Uniform Distribution')
+#--------------------------------
+# draw 2 point correlation function
+#--------------------------------
+fig_2pcf = plt.figure(figsize=(10,8)) #creates figure
+ax_2pcf = fig_2pcf.add_subplot(111) #create subplot with a set of axis with
+
+ax_2pcf.plot(avg_bin_edges, avg_bin_content, label='Isotropy')
+#ax_2pcf.hist(N_doublets_below_list_rep, bins = max(N_doublets_below_list_rep) - min(N_doublets_below_list_rep), range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+
+ax_2pcf.set_title(r'$\Psi$ distribution', fontsize=24)
+ax_2pcf.set_xlabel(r'$\Psi (^\circ)$', fontsize=20)
+ax_2pcf.set_ylabel(r'Number of pairs', fontsize=20)
+ax_2pcf.tick_params(axis='both', which='major', labelsize=20)
+ax_2pcf.legend(loc='upper left', fontsize=18)
+#ax_2pcf.set_ylim(0, 50)
+
+fig_2pcf.savefig('./results/2PointCorrFunction.pdf') #Number_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
+
+#--------------------------------
+# draw figure with the estimator
+#--------------------------------
+fig_est = plt.figure(figsize=(10,8)) #create figure
+ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
+
+ax_est.hist(number_of_pairs_below, bins = 100 , range=[min(number_of_pairs_below), max(number_of_pairs_below)], alpha=0.5, label='Isotropy')
+#ax_est.hist(N_doublets_below_list_rep, bins = max(N_doublets_below_list_rep) - min(N_doublets_below_list_rep), range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+
+#Fit the distribution of estimators for the UD and Rep distributions
+# print('\n ###### FIT PARAMETERS #######\n')
+# print('UD distribution:')
+# x_fit_ud, y_fit_ud, parameters_ud, parameter_error_ud, covariance_ud = FitEstimatorDist(content_ud, bins_ud, N_doublets_below_list_ud)
+#
+# print('\nRepeater distribution:\n')
+# x_fit_rep, y_fit_rep, parameters_rep, parameter_error_rep, covariance_rep = FitEstimatorDist(content_rep, bins_rep, N_doublets_below_list_rep)
+#
+# #plot the fits to the distribution
+# ax_est.plot(x_fit_ud, y_fit_ud, color='tab:blue', linewidth=2)
+# ax_est.plot(x_fit_rep, y_fit_rep, color='darkorange', linewidth = 2)
+
+ax_est.set_title(r'$\hat{N}(\Psi < %.0f^\circ$) distribution' % (ang_window), fontsize=24)
+ax_est.set_xlabel(r'$\hat{N}(\Psi < %.0f^\circ$)' % (ang_window), fontsize=20)
+ax_est.set_ylabel(r'Arb. units', fontsize=20)
+ax_est.tick_params(axis='both', which='major', labelsize=20)
+ax_est.legend(loc='upper right', fontsize=18)
+#ax_est.set_ylim(0, 50)
+
+fig_est.savefig('./results/NumberOfPairsBelow_%i_Distribution.pdf' % ang_window) #)distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
 #compute the 2 point correlation function for the file with a point repeater
-path_to_rep_file = '../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats/'
-repeater_file = 'ExpRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100_3834357_1.parquet'
-
-#defines the maximum angular seperation
-max_ang_sep = math.pi/4
-
-rep_2pointcorrfunc = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', max_ang_sep, 10000)
-
-#print(len(rep_2pointcorrfunc_2))
-
-plt.hist(rep_2pointcorrfunc, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
-plt.yscale('log')
-
-#plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
-
-plt.legend()
-plt.show()
+# path_to_rep_file = '../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats/'
+# repeater_file = 'ExpRepeater_Date_2015-01-01T00:00:00_Period_86164_TotalEvents_100000_AcceptedRepEvents_100_3834357_1.parquet'
+#
+# #defines the maximum angular seperation
+# max_ang_sep = math.pi/4
+#
+# rep_2pointcorrfunc = Get2PointCorrFunc(path_to_rep_file + repeater_file,'rep_ud_ra', 'rep_ud_dec', 'rep_ud_gpstime', max_ang_sep, 10000)
+#
+# #print(len(rep_2pointcorrfunc_2))
+#
+# plt.hist(rep_2pointcorrfunc, bins = 90, range = [0,math.degrees(max_ang_sep)], label='Point repeater')
+# plt.yscale('log')
+#
+# #plt.hist(log_likelihood, bins = 10, range = [min(log_likelihood), max(log_likelihood)])
+#
+# plt.legend()
+# plt.show()
 
 #hist_content, hist_bin_edges = np.histogram(list_of_ang_dist, 180)
 
