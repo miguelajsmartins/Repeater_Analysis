@@ -159,9 +159,13 @@ def EstimatorDist(list_of_histograms, lower_tau, upper_tau):
 #computes the log likelihood function
 def logLikelihood(avg_bin_content, avg_bin_edges, obs_bin_content, max_tau):
 
+    if( len(obs_bin_content) != len(avg_bin_content) ):
+        raise ValueError('Size of histograms does not match')
+
     log_obs_factorial = []
     factorial_sum = []
     obs_times_log_avg = []
+    new_avg_bin_content = []
 
     for i in range(len(obs_bin_content)):
 
@@ -176,8 +180,9 @@ def logLikelihood(avg_bin_content, avg_bin_edges, obs_bin_content, max_tau):
 
         factorial_sum.append(sum(log_obs_factorial))
         obs_times_log_avg.append(math.log(avg_bin_content[i])*obs_bin_content[i])
+        new_average_bin_content.append(avg_bin_content[i])
 
-    return -np.sum(avg_bin_content) + np.sum(obs_times_log_avg) - sum(factorial_sum)
+    return -np.sum(new_avg_bin_content) + np.sum(obs_times_log_avg) - sum(factorial_sum)
 
 #computes the distribution of the minimum tau
 def PValueTauMinDist(list_of_ordered_taus, tau_auger):
