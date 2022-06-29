@@ -97,7 +97,7 @@ def FromFiles_to_TauDist(path_to_dir, name_of_files):
     return tau_ud_all, list_of_ordered_tau_arrays
 
 #to get list of ordered taus and list with all taus from files
-def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist_max, nbins_log, hist_min_log, hist_max_log, lower_tau, upper_tau):
+def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins_log, hist_min_log, hist_max_log, nbins, hist_min, hist_max, lower_tau, upper_tau):
 
     #lists to hold the histograms with tau distributions
     list_of_tau_histograms = []
@@ -115,7 +115,7 @@ def FromFiles_to_TauHistograms(path_to_dir, name_of_files, nbins, hist_min, hist
 
         f = os.path.join(path_to_dir,filename)
 
-        if os.path.isfile(f) and name_of_files in f: # and file_counter < 5:
+        if os.path.isfile(f) and name_of_files in f:# and file_counter < 5:
 
             df = pd.read_parquet(f, engine='fastparquet')
 
@@ -230,17 +230,29 @@ def LogExpEnvelop(x, rate, x_max):
 #defines the incompatibility between distributions
 def Incompatibility(estimator_list_ud, estimator_list_rep, percentile):
 
-    #computes the mean and std of the distribution of UD estimator
+    #computes the mean and std of the distribution of likelihood for Isotropic dist.
     mean_ud = np.mean(estimator_list_ud)
+    mean_rep = np.mean(estimator_list_rep)
     sigma_ud = math.sqrt(np.var(estimator_list_ud))
 
-    quantile = np.quantile(estimator_list_rep, percentile)
+    print('Mean of test statistic for UD distribution', mean_ud)
+    print('RMS of test statistic for UD distribution', sigma_ud)
 
-    print('Mean of doublets below from UD distribution', mean_ud)
-    print('RMS of doublets below from UD distribution', sigma_ud)
-    print('The q(',percentile,') for the distribution of doublets below for Rep is', quantile)
+    if (mean_ud < mean_rep):
+        percentile = percentile
+        quantile = np.quantile(estimator_list_rep, percentile)
+        distance_from_mean = (quantile - mean_ud)/sigma_ud
+        incompatibility_info = '%.1f percent of samples with explosions are \n %.2f sigma above mean of \n TS distribution for isotropy' % (100*(1-percentile), distance_from_mean)
+        print(incompatibility_info)
 
-    return (quantile - mean_ud)/sigma_ud
+    else:
+        percentile = 1 - percentile
+        quantile = np.quantile(estimator_list_rep, percentile)
+        distance_from_mean = (quantile - mean_ud)/sigma_ud
+        incompatibility_info = '%.1f percent of samples with explosions are \n %.2f sigma below mean of \n TS distribution for isotropy' % (100*percentile, distance_from_mean)
+        print(incompatibility_info)
+
+    return incompatibility_info
 
 #defines the incompatibility between distributions
 def IncompatibilityFromGaussianFit(mean_ud, sigma_ud, mean_rep, sigma_rep, percentile):
@@ -296,6 +308,7 @@ N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 
 #files with tau distributions
 tau_files_ud = 'Ud_events_with_tau'
+#tau_files_rep = 'Rep_events_with_tau_Date_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS) #, N_INTENSITY)
 tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
 
 list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, 300, 0, 5, lower_tau, upper_tau)
@@ -344,7 +357,7 @@ tau_avg_hist_edges_ud, tau_avg_hist_content_ud = AverageTauDist(list_of_tau_hist
 tau_avg_hist_edges_rep, tau_avg_hist_content_rep = AverageTauDist(list_of_tau_hist_rep)
 
 ax_tau.plot(tau_avg_hist_edges_ud, tau_avg_hist_content_ud, label=r'Isotropy')
-ax_tau.plot(tau_avg_hist_edges_rep, tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+ax_tau.plot(tau_avg_hist_edges_rep, tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize = 20)
@@ -384,6 +397,9 @@ fig_cdf_tau_log.savefig('./results/Average_log10tau_CDF_%s_RepPeriod_%s_TotalInt
 #--------------------------------
 # draw figure with the estimator
 #--------------------------------
+percentile_doublets = 0.1
+TS_incompatibility = Incompatibility(N_doublets_below_list_ud, N_doublets_below_list_rep, percentile_doublets)
+
 fig_est = plt.figure(figsize=(10,8)) #create figure
 ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
 
@@ -408,11 +424,11 @@ ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
 ax_est.set_ylim(0, 50)
+ax_est.text(280, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 
 fig_est.savefig('./results/Estimator_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
-#define the percentile
-percentile_doublets = 0.1
+#saves fit parameters
 mean_gauss_ud = parameters_ud[0]
 sigma_gauss_ud = parameters_ud[1]
 
@@ -420,7 +436,6 @@ mean_gauss_rep = parameters_rep[0]
 sigma_gauss_rep = parameters_rep[1]
 
 print('\n')
-print('The deviation from q(', percentile_doublets, ') of the repeater dist. to the mean of the UD dist. is', Incompatibility(N_doublets_below_list_ud, N_doublets_below_list_rep, percentile_doublets), 'sigma')
 print('FROM FIT: The deviation from q(', percentile_doublets, ') of the repeater dist. to the mean of the UD dist. is', IncompatibilityFromGaussianFit(mean_gauss_ud, sigma_gauss_ud, mean_gauss_rep, sigma_gauss_rep, percentile_doublets), 'sigma')
 
 #compute the distribution of tau_min
@@ -457,7 +472,6 @@ for obs_histogram in list_of_logtau_hist_ud:
 
     print(len(log_likelihood_ud),'samples done with log_like =', log_like)
 
-
 #computes the log likelihood distribution for the samples with explosions and iso background
 for obs_histogram in list_of_logtau_hist_rep:
 
@@ -466,6 +480,10 @@ for obs_histogram in list_of_logtau_hist_rep:
     log_likelihood_rep.append(log_like)
 
     print(len(log_likelihood_rep),'samples done with log_like =', log_like)
+
+#incompatibility between Likelihoods
+percentile_like = 0.1
+TS_incompatibility = Incompatibility(log_likelihood_ud, log_likelihood_rep, percentile_like)
 
 #figure for loh likelihood
 fig_like = plt.figure(figsize=(10,8)) #create figure
@@ -481,5 +499,6 @@ ax_like.set_ylabel(r'Arb. units', fontsize=20)
 ax_like.tick_params(axis='both', which='major', labelsize=20)
 ax_like.legend(loc='upper right', fontsize=18)
 ax_like.set_ylim(0, 50)
+ax_like.text(-91000, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 
 fig_like.savefig('./results/LogLikelihood_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-OUTPUTDIR="./Vertical/MockData_Repeaters/Repeater_RandPosAndDate_large_stats/Period_1Day"
+OUTPUTDIR="./Vertical/UD_large_stats/2PointCorrFunc"
 HOSTNAME="miguel.martins@mastercr1"
-PATH2FILE="/data9/mmartins/repeater_analysis_output/Vertical/Repeater_RandPosAndDate_large_stats/Period_1Day/"
-FILE2COPY="OUTPUT_3843848_*/REP_VerticalEvents_with_tau_RandPosAndDate_Period_86164_TotalEvents_100000_AcceptedRepEvents_200_RepIntensity_5_3843848_**.parquet"
+PATH2FILE="/lustre/Auger/miguel.martins/RepeaterAnalysis/Vertical/UD_large_stats/2PointCorrFunc"
+FILE2COPY="output_2PointCorrFunc_44533_*/results/2PointCorrFunc_N_100000_44533_**.parquet"
 
 read -p "Are you sure you want to copy $FILE2COPY (y/n): " answser
 
