@@ -281,12 +281,12 @@ ax_tau_inset.hist(tau_auger, bins=100, range=[0,10], alpha = 0.5)
 
 tau_avg_hist_edges_inset, tau_avg_hist_content_inset = AverageTauDist(list_of_ordered_taus_ud, 100, 0, 10)
 
-ax_tau_inset.plot(tau_avg_hist_edges_inset, np.multiply(tau_avg_hist_content_inset,10))
+ax_tau_inset.plot(tau_avg_hist_edges_inset, tau_avg_hist_content_inset)
 
 ax_tau_inset.set_xlabel(r'$\tau$ (sidereal days)', fontsize=16)
 ax_tau_inset.set_ylabel(r'Number of pairs', fontsize=16)
 ax_tau_inset.tick_params(axis='both', which='major', labelsize=16)
-ax_tau_inset.set_xlim([0,10])
+#ax_tau_inset.set_xlim([0,10])
 #ax_tau.set_yscale('log')
 #ax_tau_inset.set_ylim(1e-2,1e2)
 
