@@ -32,38 +32,6 @@ def NormalComulative(x, mu, sigma, norm, shift):
 
     return shift + norm*( 1 + erf( (x - mu)/(np.sqrt(2)*sigma)))
 
-#convert a set of pandas columns into a list of event
-def pandas_to_event(df, str1 , str2, str3, str4):
-
-    alpha = np.radians(df[str1].to_numpy())
-    delta = np.radians(df[str2].to_numpy())
-    time = df[str3].to_numpy()
-    energy = df[str4].to_numpy()
-
-    evt_list = []
-
-    for i in range(len(alpha)):
-        evt_list.append([alpha[i],delta[i],time[i],energy[i]])
-
-    return evt_list
-
-#convert equatorial coordinates of event into healpy coordinates
-def Healpy_Event(evt_list):
-
-    new_evt_list = []
-
-    for evt in evt_list:
-        evt[1] = math.pi/2 - evt[1]
-        new_evt_list.append(evt)
-
-
-    return new_evt_list
-
-#convert equatorial coordinates into healpy coordinates
-def ToHealpyCoordinates(alpha, dec):
-
-    return alpha, np.pi/2 - dec
-
 #convert healpy coordinates into Equatorial Coordinates
 def ToEquatorialCoordinates(phi, theta):
 
@@ -268,24 +236,6 @@ def GaussianFitDist(bin_content, bin_edges, estimator_list):
     parameters_error = np.sqrt(np.diag(covariance))
 
     return x_gauss_fit, y_gauss_fit, parameters, parameters_error, covariance
-
-
-#computes the 95% confidence level areas around the CDF
-def ConfidenceLevelArea(pdf_list):
-
-    #bin edges of distribution
-    pdf_content, pdf_bin_edges = pdf_list[0]
-
-    #list to hold values of CDFs
-    cdf_list = []
-
-    #bin edges of distribution
-    for pdf in pdf_list:
-        pdf_content, pdf_bin_edges = pdf
-
-        cdf_list.append(np.cumsum(pdf_content)/sum(pdf_content))
-
-
 
 #-------------------------------
 # main
