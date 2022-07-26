@@ -99,6 +99,7 @@ print("Expected number of events with tau <", tau_max, "in region with", fractio
 print("Expected number of doublets with tau <", tau_max, "in region with", fraction_of_sky, "of the total region:", ExpectedNumberOfDoublets(N_events, tau_max, mean_rate, fraction_of_sky))
 print("Observed number of events with tau <", tau_max, "in region with", fraction_of_sky, "of the total region:", ComulativeBelow(tau_list, tau_max))
 
-plt.hist(tau_list, bins=100, range=[min(tau_list), max(tau_list)])
 
+plt.hist(tau_list, bins=100, range=[min(tau_list), max(tau_list)])
+plt.yscale('log')
 plt.show()
