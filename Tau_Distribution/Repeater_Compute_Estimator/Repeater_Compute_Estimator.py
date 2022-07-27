@@ -483,7 +483,7 @@ for obs_histogram in list_of_logtau_hist_rep:
     print(len(log_likelihood_rep),'samples done with log_like =', log_like)
 
 #incompatibility between Likelihoods
-percentile_like = 0.05
+percentile_like = 0.1
 TS_incompatibility = Incompatibility(log_likelihood_ud, log_likelihood_rep, percentile_like)
 
 #figure for loh likelihood
