@@ -16,6 +16,9 @@ from astropy.time import Time
 #to read files
 import os
 
+#for fft
+from scipy.fft import fft, fftfreq
+
 #import ROOT
 
 #for statistics
@@ -293,6 +296,11 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
     print('Vertical Shift = ', parameters[3], '+/-', parameters_error[3])
 
     return x_gauss_fit, y_gauss_fit, parameters, parameters_error, covariance
+
+#computes the FFT of the tau distribution
+def FFTTauDist(tau_list):
+
+    
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '../../DataSets/Vertical/UD_large_stats'
