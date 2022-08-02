@@ -281,12 +281,12 @@ ax_tau_inset.hist(tau_auger, bins=100, range=[0,10], alpha = 0.5)
 
 tau_avg_hist_edges_inset, tau_avg_hist_content_inset = AverageTauDist(list_of_ordered_taus_ud, 100, 0, 10)
 
-ax_tau_inset.plot(tau_avg_hist_edges_inset, tau_avg_hist_content_inset)
+ax_tau_inset.plot(tau_avg_hist_edges_inset, np.multiply(tau_avg_hist_content_inset,10))
 
 ax_tau_inset.set_xlabel(r'$\tau$ (sidereal days)', fontsize=16)
 ax_tau_inset.set_ylabel(r'Number of pairs', fontsize=16)
 ax_tau_inset.tick_params(axis='both', which='major', labelsize=16)
-#ax_tau_inset.set_xlim([0,10])
+ax_tau_inset.set_xlim([0,10])
 #ax_tau.set_yscale('log')
 #ax_tau_inset.set_ylim(1e-2,1e2)
 
@@ -396,9 +396,9 @@ tau_min_ud, tau_min_auger, tau_min_p_value = PValueTauMinDist(list_of_ordered_ta
 fig_TauMin = plt.figure(figsize=(10,8)) #create figure
 ax_TauMin = fig_TauMin.add_subplot(111) #create subplot with a set of axis with
 
-content, bins, _ = ax_TauMin.hist(np.log10(tau_min_ud), bins = 50, color = 'tab:orange', alpha = 0.7, range=[min(np.log10(tau_min_ud)), max(np.log10(tau_min_ud))], label='Isotropy')
+content, bins, _ = ax_TauMin.hist(np.log10(tau_min_ud), bins = 50, range=[min(np.log10(tau_min_ud)), max(np.log10(tau_min_ud))], alpha=0.5, label='Isotropy')
 
-ax_TauMin.axvline(np.log10(tau_min_auger), 0, max(content), linestyle = 'dashed', color = 'tab:blue', label=r'Auger data')
+ax_TauMin.axvline(np.log10(tau_min_auger), 0, max(content), linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
 ax_TauMin.plot([],linewidth=0, label=r'$p$-value = {%.3f}' % (tau_min_p_value))
 
 ax_TauMin.set_title(r'$\log_{10}(\tau_{\min})$ distribution', fontsize=24)
@@ -439,8 +439,8 @@ else:
 fig_like = plt.figure(figsize=(10,8)) #create figure
 ax_like = fig_like.add_subplot(111) #create subplot with a set of axis with
 
-ax_like.hist(loglikelihood_ud, bins = 100, color='tab:orange', alpha = 0.7, range=[min(loglikelihood_ud), max(loglikelihood_ud)], label='Isotropy')
-ax_like.axvline(loglikelihood_auger, 0, 1e3, linestyle = 'dashed', color = 'tab:blue', label=r'Auger data')
+ax_like.hist(loglikelihood_ud, bins = 100, range=[min(loglikelihood_ud), max(loglikelihood_ud)], alpha=0.5, label='Isotropy')
+ax_like.axvline(loglikelihood_auger, 0, 1e3, linestyle = 'dashed', color = 'darkorange', label=r'Auger data')
 ax_like.plot([],linewidth=0, label=r'$p$-value = {%.3f}' % (pvalue_loglike))
 #plot the fits to the distribution
 ax_like.set_title(r'$\ln \mathcal{L}$ distribution for $%.0f < \tau < %.0f$ days' % (lower_tau, upper_tau), fontsize=24)
