@@ -33,7 +33,7 @@ def SelectAugerData(filename, energy_th, theta_min, theta_max, t_min, t_max):
     auger_data_raw = pd.read_parquet(filename, engine='fastparquet')
 
     #applies cuts in energy, and theta and time
-    auger_data = auger_data_raw.loc[(auger_data_raw['sd_theta'] > theta_min) & (auger_data_raw['sd_theta'] < theta_max) & (auger_data_raw['sd_energy'] > energy_th) & (auger_data_raw['gpstime'] > t_min) & (auger_data_raw['gpstime'] < t_max) ]
+    auger_data = auger_data_raw.loc[(auger_data_raw['sd_theta'] > theta_min) & (auger_data_raw['sd_theta'] < theta_max) & (auger_data_raw['sd_energy'] >= energy_th) & (auger_data_raw['gpstime'] > t_min) & (auger_data_raw['gpstime'] < t_max) ]
 
     #saves the number of events after cuts
     N_events = len(auger_data.index)
@@ -57,12 +57,16 @@ def SelectAugerData(filename, energy_th, theta_min, theta_max, t_min, t_max):
 #checks if event is in the angular window centered at another event
 def EventInSphericalCap(alpha_center, delta_center, alpha, delta, ang_window):
 
-    ang_sep = math.acos(math.cos(delta_center)*math.cos(delta)*math.cos(alpha_center - alpha) + math.sin(delta_center)*math.sin(delta))
-
-    if( ang_sep > ang_window ):
-        return False
-    else:
+    if abs(alpha_center - alpha) < 0.0001 and abs(delta_center - delta) < 0.0001:
         return True
+
+    else:
+        ang_sep = math.acos(math.cos(delta_center)*math.cos(delta)*math.cos(alpha_center - alpha) + math.sin(delta_center)*math.sin(delta))
+
+        if( ang_sep > ang_window ):
+            return False
+        else:
+            return True
 
 #name of file with
 # if len(sys.argv) == 1:
@@ -86,13 +90,13 @@ def EventInSphericalCap(alpha_center, delta_center, alpha, delta, ang_window):
 #     file.close()
 
 #defines the cuts to apply to auger data
-energy_th = math.sqrt(10)
+energy_th = 8
 theta_min = 0
-theta_max = 60
+theta_max = 80
 
 #saves auger events after appyling the cuts
-path_to_data = '../DataSets/Auger_Pub_Data/'
-data_file = 'AugerOpenData_VerticalEvents.parquet'
+path_to_data = '../DataSets/Auger_Data/'
+data_file = 'AugerData_ArrivalDirections_8EeV_Science_2017.parquet'
 t_min, t_max, accepted_events_list = SelectAugerData(path_to_data + data_file, energy_th, theta_min, theta_max, Time('2004-01-01T00:00:00', format='fits').gps, Time('2021-12-31T23:59:59', format='fits').gps)
 
 #print the number of events and the dates between which events are being considered
@@ -141,12 +145,18 @@ event_counter = 0
 #compute the time difference between two consecutive events for repeater with uniform background
 for evt1 in accepted_events_list:
 
+    #if evt1.time < Time('2009-10-01T00:00:00', format='fits', scale='utc').gps:
+        #continue
+
     for evt2 in accepted_events_list:
 
         if evt2 > evt1:
 
             if ( abs(evt1.delta - evt2.delta) > ang_window or abs(evt1.alpha - evt2.alpha) > ang_window ):
                 continue
+
+            #if event_counter == 256:
+                #print('Event 1:', evt1.alpha, evt1.delta, Time(evt1.time, format='gps').unix, 'Event 2:', evt2.alpha, evt2.delta, Time(evt2.time, format='gps').unix)
 
             if EventInSphericalCap(evt1.alpha, evt1.delta, evt2.alpha, evt2.delta, ang_window):
                 tau = evt2.time - evt1.time
@@ -171,12 +181,12 @@ output_data = pd.DataFrame(accepted_events_with_tau, columns=['evt1_ra (rad)','e
 print(output_data)
 
 #save data in file
-output_data.to_parquet('./results/AugerOpenData_VerticalEvents_with_tau.parquet', index=False)
+output_data.to_parquet('./results/AugerData_ArrivalDirections_8EeV_Science_2017_with_tau.parquet', index=False)
 
 #export output file with relevant parameters
 selection_info = np.array([len(accepted_events_list), energy_th, theta_min, theta_max, ang_window, Time(t_min,format='gps').fits, Time(t_max,format='gps').fits])
 
 output_info = pd.DataFrame([selection_info], columns=["N_events","E_th","Theta_min", "Theta_max","Ang_window","t_begin","t_end"])
-output_info.to_parquet('./results/AugerOpenData_VerticalEvents_SelectionInfo.parquet', index=False)
+output_info.to_parquet('./results/AugerData_ArrivalDirections_8EeV_Science_2017_SelectionInfo.parquet', index=False)
 
 print(output_info.info())
