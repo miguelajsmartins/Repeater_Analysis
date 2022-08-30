@@ -298,9 +298,7 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
     return x_gauss_fit, y_gauss_fit, parameters, parameters_error, covariance
 
 #computes the FFT of the tau distribution
-def FFTTauDist(tau_list):
-
-
+#def FFTTauDist(tau_list):
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '../../DataSets/Vertical/UD_large_stats'
