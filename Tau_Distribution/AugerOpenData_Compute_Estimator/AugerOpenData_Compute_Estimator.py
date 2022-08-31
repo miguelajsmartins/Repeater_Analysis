@@ -377,8 +377,8 @@ for i in range(1,len(list_of_integration_lims)):
     #ax_est.plot([],linewidth=0, label=r'$\hat{I} = \displaystyle\int_{%i}^{%i} \displaystyle\frac{\textrm{d} N}{\textrm{d} \tau} \textrm{d}\tau$' % (lower_lim,upper_lim))
     ax_est.plot([],linewidth=0, label=r'$p$-value = {%.3f}' % (p_value))
 
-    ax_est.set_title(r'$\hat{N}(%.0f < \tau < %.0f$ days) distribution' % (lower_lim, upper_lim), fontsize=24)
-    ax_est.set_xlabel(r'$\hat{N}(%.0f < \tau < %.0f$ days)' % (lower_lim, upper_lim), fontsize=20)
+    ax_est.set_title(r'$N_{%.0f^\circ, %.0f \textrm{ day}}$-distribution' % (ang_window, upper_lim), fontsize = 24)
+    ax_est.set_xlabel(r'$N_{%.0f^\circ, %.0f \textrm{ day}}$' % (ang_window, upper_lim), fontsize = 20)
     ax_est.set_ylabel(r'Arb. units', fontsize=20)
     ax_est.tick_params(axis='both', which='major', labelsize=20)
     ax_est.legend(loc='upper right', fontsize=18)
@@ -443,8 +443,8 @@ ax_like.hist(loglikelihood_ud, bins = 100, color='tab:orange', alpha = 0.7, rang
 ax_like.axvline(loglikelihood_auger, 0, 1e3, linestyle = 'dashed', color = 'tab:blue', label=r'Auger data')
 ax_like.plot([],linewidth=0, label=r'$p$-value = {%.3f}' % (pvalue_loglike))
 #plot the fits to the distribution
-ax_like.set_title(r'$\ln \mathcal{L}$ distribution for $%.0f < \tau < %.0f$ days' % (lower_tau, upper_tau), fontsize=24)
-ax_like.set_xlabel(r'$\ln \mathcal{L}$', fontsize=20)
+ax_like.set_title(r'$\ln \mathcal{L}_{%.0f^\circ, %.0f \textrm{ day}}$-distribution' % (ang_window, upper_tau), fontsize=24)
+ax_like.set_xlabel(r'$\ln \mathcal{L}_{%.0f^\circ, %.0f \textrm{ day}}$' % (ang_window, upper_tau), fontsize=20)
 ax_like.set_ylabel(r'Arb. units', fontsize=20)
 ax_like.tick_params(axis='both', which='major', labelsize=20)
 ax_like.legend(loc='upper left', fontsize=18)

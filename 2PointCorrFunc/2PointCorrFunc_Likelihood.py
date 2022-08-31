@@ -138,19 +138,19 @@ def Read2PointCorrFunc(path_to_files, max_sep, ang_window):
 #define the log likelihood function
 def logLikelihood(avg_bin_content, avg_bin_edges, obs_bin_content, ang_window):
 
-    avg_bin_content = [avg_bin_content[i] for i in range(len(avg_bin_content)) if avg_bin_edges[i] <= ang_window]
-    obs_bin_content = [obs_bin_content[i] for i in range(len(obs_bin_content)) if avg_bin_edges[i] <= ang_window]
+    new_avg_bin_content = [avg_bin_content[i] for i in range(len(avg_bin_content)) if avg_bin_edges[i] <= ang_window]
+    new_obs_bin_content = [obs_bin_content[i] for i in range(len(obs_bin_content)) if avg_bin_edges[i] <= ang_window]
 
     log_obs_factorial = []
     factorial_sum = []
 
-    for obs in obs_bin_content:
+    for obs in new_obs_bin_content:
         for j in range(1, int(obs)+1):
             log_obs_factorial.append(math.log(j))
 
         factorial_sum.append(sum(log_obs_factorial))
 
-    return -np.sum(avg_bin_content) + np.sum(obs_bin_content*np.log(avg_bin_content)) - sum(factorial_sum)
+    return -np.sum(new_avg_bin_content) + np.sum(new_obs_bin_content*np.log(new_avg_bin_content)) - sum(factorial_sum)
 
 #defines the incompatibility between distributions
 def Incompatibility(estimator_list_ud, estimator_list_rep, percentile):
@@ -204,13 +204,13 @@ def Incompatibility(estimator_list_ud, estimator_list_rep, percentile):
 #set path to dir with 2 point corr files
 REP_DATE = '2015-01-01T00:00:00'
 PERIOD_OF_REP = '86164'
-N_EVENTS = '1000'
+N_EVENTS = '100000'
 N_ACCEPTED_REP_EVENTS = '100'
 N_INTENSITY = '100'
 N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 
-path_to_files_ud = '../DataSets/Vertical/UD_small_stats/2PointCorrFunc/'
-path_to_files_rep = '../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_small_stats/2PointCorrFunc/'
+path_to_files_ud = '../DataSets/Vertical/UD_large_stats/2PointCorrFunc/'
+path_to_files_rep = '../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats/2PointCorrFunc/'
 
 #sets maximum angular separation for 2-point corr. func. in degrees!
 max_sep = 20 #degree
@@ -226,9 +226,10 @@ avg_bin_content_rep, avg_bin_edges_rep = Average2PointCorrFunction(list_of_binEd
 
 #measures the incompatibility between TS distributions with TS: number of pairs below "ang_window"
 print('-----------------------------------------------')
-print('-- TS: Number of pairs closer than %i degree --' % ang_window)
+print('-- TS: Number of pairs separated by less than %i degree --' % ang_window)
 print('-----------------------------------------------')
-percentile = 0.1
+
+percentile = 0.99
 TS_incompatibility = Incompatibility(number_of_pairs_below_ud, number_of_pairs_below_rep, percentile)
 
 #compute the likelihood distribution
@@ -289,13 +290,13 @@ ax_est.hist(number_of_pairs_below_rep, bins = 100 , range=[min(number_of_pairs_b
 # ax_est.plot(x_fit_ud, y_fit_ud, color='tab:blue', linewidth=2)
 # ax_est.plot(x_fit_rep, y_fit_rep, color='darkorange', linewidth = 2)
 
-ax_est.set_title(r'$\hat{N}(\Psi < %.0f^\circ$) distribution' % (ang_window), fontsize=24)
-ax_est.set_xlabel(r'$\hat{N}(\Psi < %.0f^\circ$)' % (ang_window), fontsize=20)
+ax_est.set_title(r'$N_{%.0f^\circ}$-distribution' % (ang_window), fontsize=24)
+ax_est.set_xlabel(r'$N_{%.0f^\circ}$' % (ang_window), fontsize=20)
 ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
 ax_est.set_ylim(0, 50)
-ax_est.text(624500,35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
+#ax_est.text(624500,35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 fig_est.savefig('./results/NumberOfPairsBelow_%i_Distribution_%s_TotalEvents_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (ang_window, REP_DATE, N_EVENTS, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
 #----------------------------------
@@ -326,12 +327,12 @@ ax_like.hist(log_likelihood_rep, bins = 100 , range=[min(log_likelihood_rep), ma
 # ax_like.plot(x_fit_ud, y_fit_ud, color='tab:blue', linewidth=2)
 # ax_like.plot(x_fit_rep, y_fit_rep, color='darkorange', linewidth = 2)
 
-ax_like.set_title(r'$\ln \mathcal{L}$ distribution for $\Psi < %.0f^\circ$' % (ang_window), fontsize=24)
-ax_like.set_xlabel(r'$\ln \mathcal{L}$', fontsize=20)
+ax_like.set_title(r'$\ln \mathcal{L}_{%.0f^\circ}$-distribution' % (ang_window), fontsize=24)
+ax_like.set_xlabel(r'$\ln \mathcal{L}_{%.0f^\circ}$' % (ang_window), fontsize=20)
 ax_like.set_ylabel(r'Arb. units', fontsize=20)
 ax_like.tick_params(axis='both', which='major', labelsize=20)
 ax_like.legend(loc='upper right', fontsize=18)
-ax_like.text(-7.755e6, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
+#ax_like.text(-7.755e6, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 ax_like.set_ylim(0, 50)
 
 fig_like.savefig('./results/LogLikelihoodBelow_%i_Distribution_%s_TotalEvents_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (ang_window, REP_DATE, N_EVENTS, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))

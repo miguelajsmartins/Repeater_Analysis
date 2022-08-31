@@ -302,24 +302,24 @@ def FitEstimatorDist(bin_content, bin_edges, estimator_list):
 
 #set path to dir with uniform dist files
 path_to_dir_ud = '../../DataSets/Vertical/UD_large_stats'
-path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_FixedPosAndDate_large_stats'
+path_to_dir_rep = '../../DataSets/Vertical/MockData_Repeaters/Repeater_RandPosAndDate_large_stats/Period_1Hour'
 
 #list to hold all tau values from all data sets of isotropy. Note that the limits must be given in sidereal days!!
 lower_tau = 0
 upper_tau = 1
 
 #read file with tau values for repeater data
-PERIOD_OF_REP = '86164'
-REP_DATE = '2015-01-01T00:00:00'
+PERIOD_OF_REP = '3600'
+REP_DATE = 'RandPosAndDate'
 N_EVENTS = '100000'
-N_ACCEPTED_REP_EVENTS = '100'
-N_INTENSITY = '100'
+N_ACCEPTED_REP_EVENTS = '200'
+N_INTENSITY = '5'
 N_EXPLOSIONS = float(N_ACCEPTED_REP_EVENTS)/float(N_INTENSITY)
 
 #files with tau distributions
 tau_files_ud = 'Ud_events_with_tau'
-tau_files_rep = 'Rep_events_with_tau_Date_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS) #, N_INTENSITY)
-#tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
+#tau_files_rep = 'Rep_events_with_tau_Date_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS) #, N_INTENSITY)
+tau_files_rep = 'REP_VerticalEvents_with_tau_%s_Period_%s_TotalEvents_%s_AcceptedRepEvents_%s_RepIntensity_%s' % (REP_DATE, PERIOD_OF_REP, N_EVENTS, N_ACCEPTED_REP_EVENTS, N_INTENSITY)
 
 list_of_tau_hist_ud, list_of_logtau_hist_ud, N_doublets_below_list_ud, tau_min_list_ud = FromFiles_to_TauHistograms(path_to_dir_ud, tau_files_ud, 200, -3, 4, 300, 0, 5, lower_tau, upper_tau)
 list_of_tau_hist_rep, list_of_logtau_hist_rep, N_doublets_below_list_rep, tau_min_list_rep = FromFiles_to_TauHistograms(path_to_dir_rep, tau_files_rep, 200, -3, 4, 300, 0, 5, lower_tau, upper_tau)
@@ -341,7 +341,7 @@ log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud = AverageTauDist(list_of_
 log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep = AverageTauDist(list_of_logtau_hist_rep)
 
 ax_tau_log.plot(log_tau_avg_hist_edges_ud, log_tau_avg_hist_content_ud, label=r'Isotropy')
-ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+ax_tau_log.plot(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 
 #---------- CHANGE THIIIIIISSSSSSSSS ---------------------
@@ -367,7 +367,7 @@ tau_avg_hist_edges_ud, tau_avg_hist_content_ud = AverageTauDist(list_of_tau_hist
 tau_avg_hist_edges_rep, tau_avg_hist_content_rep = AverageTauDist(list_of_tau_hist_rep)
 
 ax_tau.plot(tau_avg_hist_edges_ud, tau_avg_hist_content_ud, label=r'Isotropy')
-ax_tau.plot(tau_avg_hist_edges_rep, tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+ax_tau.plot(tau_avg_hist_edges_rep, tau_avg_hist_content_rep, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 ax_tau.set_title(r'$\tau$ distribution for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
 ax_tau.set_xlabel(r'$\tau$ (sidereal days)', fontsize = 20)
@@ -387,7 +387,7 @@ cdf_ud_bin_edges, cdf_ud_content = ComulativeDistHist(log_tau_avg_hist_edges_ud,
 cdf_rep_bin_edges, cdf_rep_content = ComulativeDistHist(log_tau_avg_hist_edges_rep, log_tau_avg_hist_content_rep)
 
 ax_cdf_tau_log.plot(cdf_ud_bin_edges, cdf_ud_content, label=r'Isotropy')
-ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+ax_cdf_tau_log.plot(cdf_rep_bin_edges, cdf_rep_content, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 
 ax_cdf_tau_log.set_title(r'$N(\log_{10}(\tau))$ for angular window $\Psi = {%.0f}^\circ$' % ang_window, fontsize=24)
@@ -411,7 +411,7 @@ fig_est = plt.figure(figsize=(10,8)) #create figure
 ax_est = fig_est.add_subplot(111) #create subplot with a set of axis with
 
 content_ud, bins_ud, _ = ax_est.hist(N_doublets_below_list_ud, bins = max(N_doublets_below_list_ud) - min(N_doublets_below_list_ud) , range=[min(N_doublets_below_list_ud), max(N_doublets_below_list_ud)], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = max(N_doublets_below_list_rep) - min(N_doublets_below_list_rep), range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+content_rep, bins_rep, _ = ax_est.hist(N_doublets_below_list_rep, bins = max(N_doublets_below_list_rep) - min(N_doublets_below_list_rep), range=[min(N_doublets_below_list_rep), max(N_doublets_below_list_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #Fit the distribution of estimators for the UD and Rep distributions
 print('\n ###### FIT PARAMETERS #######\n')
@@ -425,13 +425,13 @@ x_fit_rep, y_fit_rep, parameters_rep, parameter_error_rep, covariance_rep = FitE
 ax_est.plot(x_fit_ud, y_fit_ud, color='tab:blue', linewidth=2)
 ax_est.plot(x_fit_rep, y_fit_rep, color='darkorange', linewidth = 2)
 
-ax_est.set_title(r'$\hat{N}(%.0f < \tau < %.0f$ days) distribution' % (lower_tau, upper_tau), fontsize=24)
-ax_est.set_xlabel(r'$\hat{N}(%.0f < \tau < %.0f$ days)' % (lower_tau, upper_tau), fontsize=20)
+ax_est.set_title(r'$N_{%.0f^\circ, %.0f \textrm{ day}}$ distribution' % (ang_window, upper_tau), fontsize=24)
+ax_est.set_xlabel(r'$N_{%.0f^\circ, %.0f \textrm{ day}}$' % (ang_window, upper_tau), fontsize=20)
 ax_est.set_ylabel(r'Arb. units', fontsize=20)
 ax_est.tick_params(axis='both', which='major', labelsize=20)
 ax_est.legend(loc='upper right', fontsize=18)
 ax_est.set_ylim(0, 50)
-ax_est.text(280, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
+#ax_est.text(280, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 
 fig_est.savefig('./results/Estimator_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
 
@@ -453,7 +453,7 @@ fig_TauMin = plt.figure(figsize=(10,8)) #create figure
 ax_TauMin = fig_TauMin.add_subplot(111) #create subplot with a set of axis with
 
 content, bins, _ = ax_TauMin.hist(tau_min_list_ud, bins = 50, range=[-7, -1], alpha=0.5, label='Isotropy')
-content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7,-1], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+content_rep, bins_rep, _ = ax_TauMin.hist(tau_min_list_rep, bins = 50, range=[-7,-1], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 ax_TauMin.set_title(r'$\log_{10}(\tau_{\min})$ distribution', fontsize=24)
 ax_TauMin.set_xlabel(r'$\log_{10}(\tau_{\min} / 1\textrm{ sidereal day}) $', fontsize=20)
@@ -497,15 +497,15 @@ fig_like = plt.figure(figsize=(10,8)) #create figure
 ax_like = fig_like.add_subplot(111) #create subplot with a set of axis with
 
 ax_like.hist(log_likelihood_ud, bins = 100, range=[min(log_likelihood_ud), max(log_likelihood_ud)], alpha=0.5, label='Isotropy')
-ax_like.hist(log_likelihood_rep, bins = 100, range=[min(log_likelihood_rep), max(log_likelihood_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ day' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
+ax_like.hist(log_likelihood_rep, bins = 100, range=[min(log_likelihood_rep), max(log_likelihood_rep)], alpha=0.5, label=r'Isotropy + {%i} events from {%.0f} explosions with $1/\lambda = 1$ hour' % (int(N_ACCEPTED_REP_EVENTS), N_EXPLOSIONS))
 
 #plot the fits to the distribution
-ax_like.set_title(r'$\ln \mathcal{L}$ distribution for $%.0f < \tau < %.0f$ days' % (lower_tau, upper_tau), fontsize=24)
-ax_like.set_xlabel(r'$\ln \mathcal{L}$', fontsize=20)
+ax_like.set_title(r'$\ln \mathcal{L}_{%.0f^\circ, %.0f \textrm{ day}}$-distribution' % (ang_window, upper_tau), fontsize=24)
+ax_like.set_xlabel(r'$\ln \mathcal{L}_{%.0f^\circ, %.0f \textrm{ day}}$' % (ang_window, upper_tau), fontsize=20)
 ax_like.set_ylabel(r'Arb. units', fontsize=20)
 ax_like.tick_params(axis='both', which='major', labelsize=20)
 ax_like.legend(loc='upper right', fontsize=18)
 ax_like.set_ylim(0, 50)
-ax_like.text(-2500, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
+#ax_like.text(-2500, 35, TS_incompatibility, ha='center', va='bottom', fontsize=16, linespacing=1.5, wrap=True, bbox=dict(facecolor='grey', alpha=0.2))
 
 fig_like.savefig('./results/LogLikelihood_distribution_histogram_%s_RepPeriod_%s_TotalIntensity_%s_RepIntensity_%s.pdf' % (REP_DATE, PERIOD_OF_REP, N_ACCEPTED_REP_EVENTS, N_INTENSITY))
