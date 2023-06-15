@@ -61,11 +61,13 @@ height_pao = 1425*u.meter # this is the average altitude
 pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
 
 #define start and end times
-start_date = Time('2020-01-01T00:00:00', format = 'fits', scale='utc', location=pao_loc).gps
-end_date = Time('2021-01-01T00:00:00', format = 'fits', scale='utc', location=pao_loc).gps
+start_date_fits = '2010-01-01'
+end_date_fits = '2020-01-01'
+start_date = Time(start_date_fits + 'T00:00:00', format = 'fits', scale='utc', location=pao_loc).gps
+end_date = Time(end_date_fits + 'T00:00:00', format = 'fits', scale='utc', location=pao_loc).gps
 
 #define the number of events
-n_events = 100_000
+n_events = 1_000_000
 n_accept = int(n_events / 10)
 
 #define the maximum accepted zenith angle
@@ -100,4 +102,4 @@ accepted_event_data = pd.DataFrame(zip(accepted_time, np.degrees(accepted_ra), n
 
 print(accepted_event_data)
 
-accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80.parquet' % int(n_events), index=True)
+accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80_%s_%s.parquet' % (int(n_accept), start_date_fits, end_date_fits), index=True)

@@ -27,9 +27,6 @@ def directional_exposure_dec_func(list_of_files):
 
         bin_centers, bin_contents, bin_error = data_2_binned_errorbar(np.sin(np.radians(data['dec'])), 100, -1, 1, True)
 
-        #plt.plot(bin_centers, bin_contents)
-        #plt.show()
-
         if i == 0:
             bin_centers_fix = bin_centers
 
