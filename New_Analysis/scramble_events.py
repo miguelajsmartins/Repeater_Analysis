@@ -66,12 +66,13 @@ def scramble_events(event_data, pao_loc):
     return event_data
 
 #load events from isotropic distribution
-if (len(sys.argv) == 1):
-    print('Must give a file containing isotropic distribution of events')
+if (len(sys.argv) < 3):
+    print('Must give a file containing isotropic distribution of events and index of file')
     exit()
 
 #save file name
 filename = sys.argv[1]
+sample_index = int(sys.argv[2])
 
 #checks if file exists
 if not os.path.exists(filename):
@@ -93,17 +94,12 @@ height_pao = 1425*u.meter # this is the average altitude
 #define the earth location corresponding to pierre auger observatory
 pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
 
-#defines number of scrambled maps to produce
-n_maps = 10
+start_time = datetime.now()
 
-for i in range(n_maps):
+#scrambling events
+event_data = scramble_events(event_data, pao_loc)
 
-    start_time = datetime.now()
+print('Scrambling events took', datetime.now() - start_time,'s')
 
-    #scrambling events
-    event_data = scramble_events(event_data, pao_loc)
-
-    print('Scrambling events took', datetime.now() - start_time,'s')
-
-    #save scrambled events
-    event_data.to_parquet(path_name + '/Scrambled_' + basename + '_%i.parquet' % i, index=True)
+#save scrambled events
+event_data.to_parquet(path_name + '/scrambled_events/Scrambled_' + basename + '_%i.parquet' % sample_index, index=True)
