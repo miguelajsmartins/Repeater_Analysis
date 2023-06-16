@@ -44,62 +44,74 @@ def get_binned_sky_centers(NSIDE, dec_max):
 
 
 #computes tau for each region of healpy map
-def compute_tau(event_data, ra_center, dec_center, ang_window, pao_loc):
+def compute_estimators(event_data, ra_center, dec_center, ang_window, time_window, pao_loc, rate):
 
     #save relevant quantities
     event_time = event_data['gps_time'].to_numpy()
     event_ra = np.radians(event_data['ra'].to_numpy())
     event_dec = np.radians(event_data['dec'].to_numpy())
 
+    fixed_event_ra = event_ra
+    fixed_event_dec = event_dec
+
     #delete dataframe from memory
     del event_data
 
-    #save number of events
-    n_events = len(event_time)
-
-    #save array with 1s
-    ones_n_events = np.ones(n_events)
-
-    #compute time observation time
-    obs_time = event_time[-1] - event_time[0]
-
     #tau array
     tau_array = []
+    n_max_array = []
+    lambda_array = []
 
     for i in range(len(ra_center)):
 
-        #create arrays to compute angular difference
-        dec_center_vec = dec_center[i]*ones_n_events
-        ra_center_vec = ra_center[i]*ones_n_events
+        #only consider events such that declination and ra are both below angular_window
+        inside_square = (np.abs(event_dec - dec_center[i]) < ang_window) & (np.abs(ra_center[i] - event_ra) < ang_window)
+
+        new_event_dec = event_dec[inside_square]
+        new_event_ra = event_ra[inside_square]
+        new_event_time = event_time[inside_square]
+
+        #save number of events
+        n_events = len(new_event_dec)
+
+        #ensure that ra_center and dec_center are of the same size as event_dec
+        vec_with_ones = np.ones(n_events)
+        dec_center_vec = dec_center[i]*vec_with_ones
+        ra_center_vec = ra_center[i]*vec_with_ones
 
         #computes angular difference
-        psi = ang_diff(dec_center_vec, event_dec, ra_center_vec, event_ra)
+        psi = ang_diff(dec_center_vec, new_event_dec, ra_center_vec, new_event_ra)
 
+        #select events such that they are seperated by less than ang_window
         is_in_ang_window = psi < ang_window
 
-        #print(np.degrees(psi[is_in_ang_window]))
-
-        #saves times of events
-        times = event_time[is_in_ang_window]
+        times = new_event_time[is_in_ang_window]
 
         if len(times) < 2:
             tau = np.nan
+            n_max = np.nan
+            lambda_estimator = np.nan
         else:
+
+            times.sort()
+
             delta_times = np.diff(times)
 
-            #compute rate of events
-            rate = len(times) / obs_time
+            n_max = max([len(times[np.where(times < time + time_window)[0]]) for time in times])
 
             #computes tau
-            tau = rate*min(delta_times)
+            tau = delta_times[0]
+            lambda_estimator = len(delta_times)*np.log(rate) + sum(np.log(delta_times))
 
         #fill array with tau values
         tau_array.append(tau)
+        lambda_array.append(lambda_estimator)
+        n_max_array.append(n_max)
 
-        print(i, 'events done')
+        #print(i, 'events done')
 
     #build dataframe with tau for each pixel in healpy map
-    tau_data = pd.DataFrame(zip(np.degrees(dec_center), np.degrees(ra_center), tau_array), columns = ['ra_center', 'dec_center', 'tau'])
+    tau_data = pd.DataFrame(zip(np.degrees(dec_center), np.degrees(ra_center), np.array(tau_array)*rate, n_max_array, lambda_array), columns = ['ra_center', 'dec_center', 'tau', 'nMax_1day', 'lambda'])
 
     return tau_data
 
@@ -117,11 +129,16 @@ if not os.path.exists(filename):
     exit()
 
 #save path to file and its basename
-path_name = os.path.dirname(filename)
+path_input = os.path.dirname(filename)
 basename = os.path.splitext(os.path.basename(filename))[0]
+path_output = './' + path_input.split('/')[1] + '/estimators'
 
 #save dataframe with isotropic events
 event_data = pd.read_parquet(filename, engine = 'fastparquet')
+
+#compute number of events and observation time
+n_events = len(event_data.index)
+obs_time = event_data['gps_time'].loc[len(event_data.index) - 1] - event_data['gps_time'].loc[0]
 
 #event_data = event_data.drop(labels=range(10_000, len(event_data.index)), axis = 0)
 
@@ -142,25 +159,21 @@ NSIDE = 128
 
 #defines the angular window
 ang_window = np.radians(1)
+time_window = 86_164 #consider a time window of a single day
+
+#compute event average event rate in angular window
+rate = (n_events / obs_time)*((1 - np.cos(ang_window)) / (1 + np.sin(dec_max)))
 
 #gets the bin_centers of the healpy sky
 ra_center, dec_center = get_binned_sky_centers(NSIDE, dec_max)
 
-print(len(ra_center))
-
+#computing tau
 start_time = datetime.now()
 
-#computing tau for each event
-tau_data = compute_tau(event_data, ra_center, dec_center, ang_window, pao_loc)
+estimator_data = compute_estimators(event_data, ra_center, dec_center, ang_window, time_window, pao_loc, rate)
 
-print('Computing tau took', datetime.now() - start_time ,'s')
+print('Computing estimators took', datetime.now() - start_time ,'s')
 
-print(tau_data.head())
+print(estimator_data.count())
 
-#     #scrambling events
-#     event_data = scramble_events(event_data, pao_loc)
-#
-#     print('Scrambling events took', datetime.now() - start_time,'s')
-#
-#     #save scrambled events
-#     event_data.to_parquet(path_name + '/Scrambled_' + basename + '_%i.parquet' % i, index=True)
+estimator_data.to_parquet(path_output + '/' + basename + '_Estimators.parquet', index = True)
