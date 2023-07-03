@@ -97,6 +97,8 @@ pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao
 start_time = datetime.now()
 
 #scrambling events
+seed = seed(open('/dev/random','rb').read(4))
+
 event_data = scramble_events(event_data, pao_loc)
 
 print('Scrambling events took', datetime.now() - start_time,'s')

@@ -20,6 +20,7 @@ from event_manip import ang_diff
 from event_manip import time_ordered_events
 from event_manip import compute_directional_exposure
 from event_manip import get_normalized_exposure_map
+from event_manip import local_LiMa_significance
 
 #converts colatitude to declination
 def colat_to_dec(colat):
@@ -30,25 +31,18 @@ def dec_to_colat(dec):
     return np.pi / 2 - dec
 
 #returns centers of bins in healpy sky given NSIDE
-def get_binned_sky_centers(NSIDE):
+def get_binned_sky_centers(NSIDE, bin_indexes):
 
-    #compute the number of pixels
-    npix = hp.nside2npix(NSIDE)
-
-    #get array with bin indexes
-    bin_indexes = np.arange(npix)
-
-    #get colatidude and ra of each bin center in helpy sky
+    #get colatidude and ra of each bin center in healpy sky
     colat, ra = hp.pix2ang(NSIDE, bin_indexes)
 
     #convert to declination
-    dec = colat_to_dec(colat)
+    #dec = colat_to_dec(colat)
 
-    return ra, dec
-
+    return ra, colat
 
 #computes tau for each region of healpy map
-def compute_estimators(event_data, NSIDE, rate, time_window, theta_max, pao_lat): #ra_center, dec_center, ang_window, time_window, pao_loc, rate):
+def compute_estimators(event_data, NSIDE, rate, target_radius, time_window, theta_max, pao_lat):
 
     #save relevant quantities
     event_time = event_data['gps_time'].to_numpy()
@@ -61,6 +55,8 @@ def compute_estimators(event_data, NSIDE, rate, time_window, theta_max, pao_lat)
 
     #compute number of pixels
     npix = hp.nside2npix(NSIDE)
+    n_events = len(event_dec)
+    pixel_area = 4*np.pi / npix
 
     #get exposure map
     exposure_map = get_normalized_exposure_map(NSIDE, theta_max, pao_lat)
@@ -69,35 +65,54 @@ def compute_estimators(event_data, NSIDE, rate, time_window, theta_max, pao_lat)
     all_pixel_indices = np.arange(npix)
     all_event_pixel_indices = hp.ang2pix(NSIDE, event_colat, event_ra)
 
-    #tau array
+    #save ra and colatitude from center of pixels
+    ra_center, colat_center = get_binned_sky_centers(NSIDE, all_pixel_indices)
+
+    #save vector corresponding to center of each pixel
+    vec_center = hp.ang2vec(colat_center, ra_center)
+
+    #save pixel indices of each query disc centered at each pixel
+    all_pixels_target = np.array([hp.query_disc(NSIDE, vec = vec, radius=target_radius) for vec in vec_center], dtype=object)
+
+    #initialize arrays
+    ra_target = []
+    colat_target = []
     tau_array = []
-    n_max_array = []
+    n_max_short_array = []
+    n_max_medium_array = []
+    n_max_large_array = []
     lambda_array = []
+    events_in_target = []
+    expected_events_in_target = []
+    LiMa_significance_array = []
 
-    for i, pixel_index in enumerate(all_pixel_indices):
+    for i, pixels_per_target in enumerate(all_pixels_target):
 
-        #event indices corresponding to a given pixel
-        event_pixels = np.where(all_event_pixel_indices == pixel_index)[0]
+        #ensure all pixels in target are within non-zero exposure
+        if np.any(exposure_map[pixels_per_target] == 0):
+            continue
 
-        if len(event_pixels) == 0 or len(event_pixels) == 1:
+        #save corresponding right ascensions and declinations
+        ra_target.append(ra_center[i])
+        colat_target.append(colat_center[i])
+
+        #event indices corresponding to a given target
+        event_pixels_per_target = np.where(np.isin(all_event_pixel_indices, pixels_per_target))[0]
+
+        #compute Li Ma significance for a given target
+        exposure_on, exposure_off, LiMa_significance = local_LiMa_significance(n_events, event_pixels_per_target, pixels_per_target, pixel_area, exposure_map, theta_max, pao_lat)
+
+        #times of the events in each target
+        times = event_time[event_pixels_per_target]
+
+        if len(event_pixels_per_target) <= 1:
             tau = np.nan
             lambda_estimator = np.nan
-            n_max = len(event_pixels)
+            n_max_short = len(event_pixels_per_target)
+            n_max_medium = len(event_pixels_per_target)
+            n_max_large = len(event_pixels_per_target)
 
-        if len(event_pixels) > 1:
-
-            #save events within that pixel
-            new_event_dec = event_dec[event_pixels]
-            new_event_ra = event_ra[event_pixels]
-            times = event_time[event_pixels]
-
-            #computes exposure ratio
-            exposure_on = exposure_map[pixel_index]
-            exposure_off = np.copy(exposure_map)
-            exposure_off = np.delete(exposure_off, pixel_index)
-            exposure_off = sum(exposure_off)
-
-            alpha = exposure_on / exposure_off
+        if len(event_pixels_per_target) > 1:
 
             #sort events by time
             times.sort()
@@ -106,98 +121,35 @@ def compute_estimators(event_data, NSIDE, rate, time_window, theta_max, pao_lat)
             delta_times = np.diff(times)
 
             #compute maximum number of events in given time_window
-            n_max = max([ len(times[np.where( (times < time + time_window) & (times > time) )[0]]) for time in times ])
+            n_max_short = max([ len(times[np.where( (times < time + time_window[0]) & (times >= time) )[0]]) for time in times ])
+            n_max_medium = max([ len(times[np.where( (times < time + time_window[1]) & (times >= time) )[0]]) for time in times ])
+            n_max_large = max([ len(times[np.where( (times < time + time_window[2]) & (times >= time) )[0]]) for time in times ])
 
             #computes tau and lambda
-            local_rate = rate*alpha
+            local_rate = rate*exposure_on
 
             tau = delta_times[0]*local_rate
             lambda_estimator = -np.sum(np.log(delta_times*local_rate))
 
-            if len(event_pixels) > 10:
-                print(delta_times*local_rate)
-                print(lambda_estimator)
-
         #fill array with estimator values
         tau_array.append(tau)
+        events_in_target.append(len(event_pixels_per_target))
+        expected_events_in_target.append(exposure_on*n_events)
         lambda_array.append(lambda_estimator)
-        n_max_array.append(n_max)
+        n_max_short_array.append(n_max_short)
+        n_max_medium_array.append(n_max_medium)
+        n_max_large_array.append(n_max_large)
+        LiMa_significance_array.append(LiMa_significance)
 
-    #convert lists to vectors
-    tau_array = np.array(tau_array)
-    n_max_array = np.array(n_max_array)
-    lambda_array = np.array(lambda_array)
+        if (i % 1000 == 0):
+            print(i , '/', len(all_pixels_target), 'targets done!')
 
-    #save ra and declinations from center of pixels
-    ra_center, dec_center = get_binned_sky_centers(NSIDE)
+    dec_target = colat_to_dec(np.array(colat_target))
 
     #build dataframe with tau for each pixel in healpy map
-    estimator_data = pd.DataFrame(zip(np.degrees(ra_center), np.degrees(dec_center), np.array(tau_array), n_max_array, lambda_array), columns = ['ra_center', 'dec_center', 'tau', 'nMax_1day', 'lambda'])
+    estimator_data = pd.DataFrame(zip(np.degrees(np.array(ra_target)), np.degrees(np.array(dec_target)), events_in_target, expected_events_in_target, tau_array, n_max_short_array, n_max_medium_array, n_max_large_array, lambda_array, LiMa_significance_array), columns = ['ra_center', 'dec_center', 'events_in_target', 'expected_events_in_target', 'tau', 'nMax_1day', 'nMax_1week', 'nMax_1month', 'lambda', 'LiMa_significance'])
 
     return estimator_data
-
-#computes the Li MA significance for each pixel
-def compute_LiMa_significance(event_data, NSIDE, theta_max, pao_lat):
-
-    #save relevant quantities
-    event_time = event_data['gps_time'].to_numpy()
-    event_ra = np.radians(event_data['ra'].to_numpy())
-    event_dec = np.radians(event_data['dec'].to_numpy())
-    event_colat = dec_to_colat(event_dec)
-
-    #delete dataframe from memory
-    del event_data
-
-    #saves number of events
-    n_events = len(event_colat)
-
-    #compute number of pixels
-    npix = hp.nside2npix(NSIDE)
-
-    #get exposure map
-    exposure_map = get_normalized_exposure_map(NSIDE, theta_max, pao_lat)
-
-    #array with all pixel indices and event pixel indices
-    all_pixel_indices = np.arange(npix)
-    all_event_pixel_indices = hp.ang2pix(NSIDE, event_colat, event_ra)
-
-    #initialize significance
-    significance_array = []
-
-    for i, pixel_index in enumerate(all_pixel_indices):
-
-        #event indices corresponding to a given pixel
-        event_pixels = np.where(all_event_pixel_indices == pixel_index)[0]
-
-        if len(event_pixels) == 0:
-            significance = np.nan
-
-        if len(event_pixels) > 1:
-
-            #computes n_on and n_off
-            N_on = len(event_pixels)
-            N_off = n_events - N_on
-            ratio_on = N_on / n_events
-            ratio_off = N_off / n_events
-
-            #computes LiMa alpha given exposures
-            exposure_on = exposure_map[pixel_index]
-            exposure_off = np.copy(exposure_map)
-            exposure_off = np.delete(exposure_off, pixel_index)
-            exposure_off = sum(exposure_off)
-
-            alpha = exposure_on / exposure_off
-
-            #compute significance
-            parcel_on = N_on * np.log((1 + 1 / alpha)*ratio_on)
-            parcel_off = N_off * np.log((1 + alpha)*ratio_off)
-
-            significance = np.sqrt(2)*np.sign(N_on - alpha*N_off)*np.sqrt(parcel_on + parcel_off)
-
-        significance_array.append(significance)
-
-    return significance_array
-
 
 #load events from isotropic distribution
 if (len(sys.argv) == 1):
@@ -224,56 +176,43 @@ event_data = pd.read_parquet(filename, engine = 'fastparquet')
 n_events = len(event_data.index)
 obs_time = event_data['gps_time'].loc[len(event_data.index) - 1] - event_data['gps_time'].loc[0]
 
-#event_data = event_data.drop(labels=range(10_000, len(event_data.index)), axis = 0)
-
 #set position of the pierre auger observatory
 pao_lat = np.radians(-35.15) # this is the average latitude
 pao_long = np.radians(-69.2) # this is the averaga longitude
 pao_height = 1425*u.meter # this is the average altitude
 
-#defines the maximum declination
-theta_max = np.radians(80)
-dec_max = pao_lat + theta_max
-
 #define the earth location corresponding to pierre auger observatory
 pao_loc = EarthLocation(lon=pao_long*u.rad, lat=pao_lat*u.rad, height=pao_height)
 
+#defines the maximum declination and a little tolerance
+theta_max = np.radians(80)
+dec_max = pao_lat + theta_max
+
 #defines the NSIDE parameter
-NSIDE = 64
+NSIDE = 128
 
 #defines the time window
-time_window = 86_164 #consider a time window of a single day
+time_window = [86_164, 7*86_164, 30*86_164] #consider a time window of a single day
 
 #compute event average event rate in angular window
-ang_window = hp.nside2resol(NSIDE)
+target_radius = np.radians(1)
 rate = (n_events / obs_time)
 
 #computing estimators for a given skymap of events
 start_time = datetime.now()
 
-estimator_data = compute_estimators(event_data, NSIDE, rate, time_window, theta_max, pao_lat)
+estimator_data = compute_estimators(event_data, NSIDE, rate, target_radius, time_window, theta_max, pao_lat)
 
 end_time = datetime.now() - start_time
 
 print('Computing estimators took', end_time,'s')
-
-#computing Li Ma significance
-start_time_2 = datetime.now()
-
-LiMa_significance = compute_LiMa_significance(event_data, NSIDE, theta_max, pao_lat)
-
-end_time_2 = datetime.now() - start_time_2
-
-print('Computing LiMa significance took', end_time,'s')
-
-#add Li Ma significance to estimator data
-estimator_data['LiMa_significance'] = pd.Series(LiMa_significance)
 
 #order events by declination
 estimator_data = estimator_data.sort_values('dec_center')
 estimator_data = estimator_data.reset_index(drop=True)
 
 #prints table with summary of data
+print(estimator_data)
 print(estimator_data.describe())
 
 #saves estimator data

@@ -102,4 +102,4 @@ accepted_event_data = pd.DataFrame(zip(accepted_time, np.degrees(accepted_ra), n
 
 print(accepted_event_data)
 
-accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80_%s_%s.parquet' % (int(n_accept), start_date_fits, end_date_fits), index=True)
+accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80_%s_%s_4.parquet' % (int(n_accept), start_date_fits, end_date_fits), index=True)

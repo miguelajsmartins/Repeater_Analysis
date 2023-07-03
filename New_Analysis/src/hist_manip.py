@@ -17,10 +17,10 @@ def get_bin_width(bin_edges):
         return bin_widths
 
 #plot error bar from 1d numpy array or series
-def data_2_binned_errorbar(data, nbins, bin_lower, bin_upper, is_density):
+def data_2_binned_errorbar(data, nbins, bin_lower, bin_upper, weights, is_density):
 
     #convert data into numpy array
-    bin_content, bin_edges = np.histogram(data, bins = nbins, range = [bin_lower, bin_upper], density=is_density)
+    bin_content, bin_edges = np.histogram(data, bins = nbins, range = [bin_lower, bin_upper], density=is_density, weights=weights)
 
     #compute bin centers
     bin_centers = [(bin_edges[i] + bin_edges[i-1]) / 2 for i in range(1, len(bin_edges))]
@@ -32,6 +32,23 @@ def data_2_binned_errorbar(data, nbins, bin_lower, bin_upper, is_density):
         bin_error = np.sqrt(bin_content)
 
     return bin_centers, bin_content, bin_error
+
+#plot error bar from 1d numpy array or series
+def data_2_binned_content(data, nbins, bin_lower, bin_upper, weights, is_density):
+
+    #convert data into numpy array
+    bin_content, bin_edges = np.histogram(data, bins = nbins, range = [bin_lower, bin_upper], density=is_density, weights=weights)
+
+    #compute bin centers
+    bin_centers = [(bin_edges[i] + bin_edges[i-1]) / 2 for i in range(1, len(bin_edges))]
+
+    #compute error whether density is being used or not
+    if(is_density):
+        bin_error = np.sqrt(bin_content) / np.sqrt(len(data))
+    else:
+        bin_error = np.sqrt(bin_content)
+
+    return bin_content
 
 #plot plot bar from 1d numpy array or series
 def hist_2_plot(data, nbins, bin_lower, bin_upper, is_density):
