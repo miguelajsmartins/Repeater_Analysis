@@ -74,7 +74,7 @@ def get_LiMa_significance_dist(list_of_files):
         data = pd.read_parquet(file, engine='fastparquet')
 
         #restrict regions with appreceable exposure
-        #data = data[data['dec_center'] < 0]
+        data = data[data['dec_center'] < 0]
 
         LiMa_significance = data['LiMa_significance'].to_numpy()
 

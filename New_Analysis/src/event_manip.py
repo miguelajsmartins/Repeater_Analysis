@@ -139,7 +139,7 @@ def get_integrated_exposure_between(dec_min, dec_max, NSIDE, theta_max, earth_la
 
     return 2*np.pi*np.trapz(exposure_map[in_region]*np.sin(colat[in_region]), x=colat[in_region])
 
-#computes the Li MA significance for a given target
+#computes the Li MA significance for a given target in a binned sky
 def local_LiMa_significance(n_events, event_pixels_in_target, pixels_in_target, area_of_pixel, exposure_map, theta_max, pao_lat):
 
     #computes n_on and n_off
@@ -151,6 +151,29 @@ def local_LiMa_significance(n_events, event_pixels_in_target, pixels_in_target, 
     #computes LiMa alpha given exposures
     exposure_on = np.sum(exposure_map[pixels_in_target])*area_of_pixel
     exposure_off = np.sum(exposure_map)*area_of_pixel - exposure_on
+
+    alpha = exposure_on / exposure_off
+
+    #compute significance
+    parcel_on = N_on * np.log((1 + 1 / alpha)*ratio_on)
+    parcel_off = N_off * np.log((1 + alpha)*ratio_off)
+
+    significance = np.sqrt(2)*np.sign(N_on - alpha*N_off)*np.sqrt(parcel_on + parcel_off)
+
+    return exposure_on, exposure_off, significance
+
+#computes the Li MA significance for a given target in an unbinned sky
+def unbinned_local_LiMa_significance(n_events, events_in_target, area_of_target, integrated_exposure, target_dec, theta_max, pao_lat):
+
+    #computes n_on and n_off
+    N_on = len(events_in_target)
+    N_off = n_events - N_on
+    ratio_on = N_on / n_events
+    ratio_off = N_off / n_events
+
+    #computes LiMa alpha given exposures
+    exposure_on = compute_directional_exposure([target_dec], theta_max, pao_lat)[0]*area_of_target / integrated_exposure
+    exposure_off = 1 - exposure_on
 
     alpha = exposure_on / exposure_off
 
