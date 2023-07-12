@@ -3,10 +3,15 @@ import numpy as np
 import healpy as hp
 
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
 import astropy.units as u
 from astropy.coordinates import EarthLocation
 import os
 import sys
+
+import scipy.interpolate as spline
 
 sys.path.append('./src/')
 
@@ -22,102 +27,70 @@ plt.rcParams.update({
     'font.family' : 'serif'
 })
 
-#rounds the declination to multiples of 5
+#rounds the declination to multiples of 2 (the bin width)
 def round_declination(dec):
 
-    return dec - (dec % 5)
+    return dec - (dec % 2)
 
-#fit the tail of the distribution of lambda and compute the corresponding expected rate
-def get_fit_params_lambda_dist(filename, theta_max, lat_pao):
+#rounds the rate to multiples of .5
+def round_rate(rate):
+
+    return rate - (rate % .5)
+
+#fit the tail of the distribution of lambda
+def get_fit_params_lambda_dist_per_rate(filename):
 
     #get the lambda distribution
-    lambda_data = pd.read_json(complete_fname_lambda)
+    lambda_data = pd.read_json(filename)
 
-    #compute max declination in degrees
-    dec_max = np.degrees(theta_max + lat_pao)
-
-    #remove declinations outside field of view of observatory
-    lambda_data = lambda_data[lambda_data['dec_low_edges'] < dec_max]
+    lambda_data = lambda_data[lambda_data['omega_upper_edges'] > 1]
 
     #make sure lists are arrays
     lambda_data['lambda_bin_centers'] = lambda_data['lambda_bin_centers'].apply(lambda x: np.array(x))
     lambda_data['lambda_bin_content'] = lambda_data['lambda_bin_content'].apply(lambda x: np.array(x))
 
     #compute declination bin centers
-    dec_bin_centers = lambda_data.apply(lambda x: (x['dec_low_edges'] + x['dec_upper_edges']) / 2, axis = 1).to_numpy()
-
-    #compute the theoretical directional exposure rate for each declination bin using the average declination. This could be improved.
-    theo_directional_exposure = compute_directional_exposure(np.radians(dec_bin_centers), theta_max, lat_pao)
-    integrated_exposure = np.trapz(theo_directional_exposure*np.cos(np.radians(dec_bin_centers)), x=np.radians(dec_bin_centers))
-    theo_directional_exposure = (theo_directional_exposure) / integrated_exposure
+    rate_bin_low_edges = lambda_data['omega_low_edges'].to_numpy()
+    rate_bin_upper_edges = lambda_data['omega_upper_edges'].to_numpy()
 
     #compute the error of each bin content
     lambda_data['lambda_bin_error'] = lambda_data['lambda_bin_content'].apply(lambda x: np.sqrt(x))
 
-    #compute mean and sigma of lambda_distribution for each declination
-    lambda_data['lambda_dist_mean'] = lambda_data.apply(lambda x: sum(x['lambda_bin_centers']*x['lambda_bin_content']) / sum(x['lambda_bin_content']) , axis = 1)
-    lambda_data['lambda_dist_2nd_moment'] = lambda_data.apply(lambda x: sum((x['lambda_bin_centers']**2)*x['lambda_bin_content']) / sum(x['lambda_bin_content']) , axis = 1)
-    lambda_data['lambda_dist_sigma'] = lambda_data.apply(lambda x: np.sqrt(x['lambda_dist_2nd_moment'] - x['lambda_dist_mean']**2) , axis = 1)
-
     #fit the lambda distribution as a function of declination
-    lambda_data['tail_fit_params'] = lambda_data.apply(lambda x: fit_routines.perform_fit_exp(x['lambda_bin_centers'], x['lambda_bin_content'], x['lambda_bin_error'], x['lambda_dist_mean'], x['lambda_dist_sigma']), axis=1)
+    lambda_data['tail_fit_params'] = lambda_data.apply(lambda x: fit_routines.perform_fit_exp(x['lambda_bin_centers'], x['lambda_bin_content'], x['lambda_bin_error'], x['lambda_dist_quantile_99']), axis=1)
 
-    #get the slope of the tail, correspoding error and chi2 of fit
-    lambda_dist_tail_slope = lambda_data['tail_fit_params'].apply(lambda x: x[0][1]).to_numpy()
-    lambda_dist_tail_slope_error = lambda_data['tail_fit_params'].apply(lambda x: x[1][1]).to_numpy()
-    lambda_dist_tail_chi2 = lambda_data['tail_fit_params'].apply(lambda x: x[4]).to_numpy()
+    #save the comulative and normalized lambda CDF, along with fit initial point and beta_Lambda
+    lambda_data['lambda_tail_fit_initial_point'] = lambda_data['tail_fit_params'].apply(lambda x: x[2][0])
+    lambda_data['lambda_tail_fit_slope'] = lambda_data['tail_fit_params'].apply(lambda x: [x[0][1], x[1][1]])
+    lambda_data['lambda_tail_fit_norm'] = lambda_data['tail_fit_params'].apply(lambda x: [x[0][0], x[1][0]])
+    lambda_data['lambda_tail_fit_chi2'] = lambda_data['tail_fit_params'].apply(lambda x: x[4])
 
-    #return lambda_data
-    return dec_bin_centers, theo_directional_exposure, lambda_dist_tail_slope, lambda_dist_tail_slope_error, lambda_dist_tail_chi2
+    #delete unnecessary columns
+    lambda_data = lambda_data.drop('tail_fit_params', axis = 1)
 
-#get lambda distribution for specific declinations
-def get_fitted_lambda_dist(filename, dec, theta_max, lat_pao):
+    #update bin content
+    lambda_data['above_fit_initial_point'] = lambda_data.apply(lambda x: x['lambda_bin_centers'] > x['lambda_tail_fit_initial_point'], axis = 1)
+    lambda_data['updated_lambda_bin_content'] = lambda_data.apply(lambda x: np.where(x['above_fit_initial_point'], x['lambda_tail_fit_norm'][0]*np.exp(- x['lambda_tail_fit_slope'][0]*x['lambda_bin_centers']), x['lambda_bin_content']), axis = 1)
+    lambda_data['cdf_lambda_bin_content'] = lambda_data['updated_lambda_bin_content'].apply(lambda x: np.cumsum(x) / np.sum(x))
 
-    #get the lambda distribution
-    lambda_data = pd.read_json(complete_fname_lambda)
+    lambda_data = lambda_data.drop('above_fit_initial_point', axis = 1)
 
-    #compute max declination in degrees
-    dec_max = np.degrees(theta_max + lat_pao)
+    #save distributions and fit parameters
+    lambda_bin_centers = lambda_data['lambda_bin_centers'].to_numpy()
+    lambda_bin_content = lambda_data['lambda_bin_content'].to_numpy()
+    lambda_bin_error = lambda_data['lambda_bin_error'].to_numpy()
+    lambda_cdf_bin_content = lambda_data['cdf_lambda_bin_content'].to_numpy()
 
-    #remove declinations outside field of view of observatory
-    lambda_data = lambda_data[lambda_data['dec_low_edges'] < dec_max]
+    lambda_tail_fit_initial_point = lambda_data['lambda_tail_fit_initial_point'].to_numpy()
+    lambda_tail_fit_slope = lambda_data['lambda_tail_fit_slope'].to_numpy()
+    lambda_tail_fit_norm = lambda_data['lambda_tail_fit_norm'].to_numpy()
+    #lambda_tail_fit_shift = lambda_data['lambda_tail_fit_shift'].to_numpy()
+    lambda_tail_fit_chi2 = lambda_data['lambda_tail_fit_chi2'].to_numpy()
 
-    #rounds requested dec
-    rounded_dec = round_declination(dec)
+    #save fitted Lambda distribution in original file
+    lambda_data.to_json(filename)
 
-    #gives error if requested declination does not exist
-    if rounded_dec not in lambda_data['dec_low_edges'].values:
-        print('requested declination', dec, 'is not in datafile!')
-        exit()
-
-    #restrict to a given declination band
-    lambda_data = lambda_data[lambda_data['dec_low_edges'] == rounded_dec]
-
-    lambda_data = lambda_data.reset_index()
-
-    #save lambda bin centers and contents
-    dec_low = lambda_data['dec_low_edges'].loc[0]
-    dec_high = lambda_data['dec_upper_edges'].loc[0]
-
-    lambda_bin_centers = np.array(lambda_data['lambda_bin_centers'].loc[0])
-    lambda_bin_content = np.array(lambda_data['lambda_bin_content'].loc[0])
-    lambda_bin_error = np.sqrt(lambda_bin_content)
-
-    #compute sample average and rms
-    mean = sum(lambda_bin_centers*lambda_bin_content) / sum(lambda_bin_content)
-    second_moment = sum((lambda_bin_centers**2)*lambda_bin_content) / sum(lambda_bin_content)
-    sigma = np.sqrt(second_moment - mean**2)
-
-    #fit lambda distribution
-    popt, perr, lambda_cont, fit_curve, chi2 = fit_routines.perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, mean, sigma)
-
-    #compute the cdf
-    lambda_cdf = np.cumsum(lambda_bin_content) / sum(lambda_bin_content)
-
-    #compute fitted cdf
-    fitted_cdf = 1 - np.exp(-popt[1]*lambda_cont)
-
-    return dec_low, dec_high, lambda_bin_centers, lambda_bin_content, lambda_bin_error, lambda_cont, fit_curve, lambda_cdf, fitted_cdf
+    return rate_bin_low_edges, rate_bin_upper_edges, [lambda_bin_centers, lambda_bin_content, lambda_bin_error, lambda_cdf_bin_content], [lambda_tail_fit_initial_point, np.array(lambda_tail_fit_norm, dtype=object), np.array(lambda_tail_fit_slope, dtype=object), lambda_tail_fit_chi2]
 
 #get the axis with the declination values corresponding to ticks of declination
 def get_exposure_dec_axis(ax_dec, ax_exposure, nticks, theta_max, pao_lat):
@@ -139,8 +112,6 @@ def get_exposure_dec_axis(ax_dec, ax_exposure, nticks, theta_max, pao_lat):
 
     dir_exposure_ticks = dir_exposure_ticks / integrated_exposure
 
-    print(dir_exposure_ticks)
-
     #set ticks and tick labels
     ax_dec.set_xticks(dec_ticks)
     ax_dec.set_xticklabels(['%.0f' % dec for dec in dec_ticks])
@@ -154,11 +125,14 @@ def get_exposure_dec_axis(ax_dec, ax_exposure, nticks, theta_max, pao_lat):
 
 #save file containing distribution of lambda as a function of declination
 path_to_files = './datasets/estimator_dist'
-fname_lambda = 'Lambda_dist_per_dec_1000.json'
-complete_fname_lambda = os.path.join(path_to_files, fname_lambda)
+fname_lambda_per_dec = 'Lambda_dist_per_dec_997.json'
+fname_lambda_per_rate = 'Lambda_dist_per_rate_997.json'
+
+fname_lambda_per_dec = os.path.join(path_to_files, fname_lambda_per_dec)
+fname_lambda_per_rate = os.path.join(path_to_files, fname_lambda_per_rate)
 
 #check if requested file exists
-if not os.path.exists(complete_fname_lambda):
+if not os.path.exists(fname_lambda_per_dec):
     print('Requested file does not exist!')
     exit()
 
@@ -173,91 +147,82 @@ pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao
 #define theta_max
 theta_max = np.radians(80)
 
+# ------------------------------------------
+# Plot slope of lambda dist and fit chi2 as a function of the event declination
+# ------------------------------------------
+fig_lambda_slope = plt.figure(figsize=(10, 4))
+ax_lambda_slope_rate_func = fig_lambda_slope.add_subplot(121)
+ax_lambda_chi2_rate_func = fig_lambda_slope.add_subplot(122)
+
+#fit lambda distribution as a function of the declination
+rate_bin_low_edges, rate_bin_upper_edges, lambda_dist, lambda_fit = get_fit_params_lambda_dist_per_rate(fname_lambda_per_rate)
+rate_bin_centers = np.array([ (rate_bin_low_edges[i] + rate_bin_upper_edges[i]) / 2 for i in range(len(rate_bin_low_edges)) ])
+
+lambda_fit_tail_slope = [lambda_slope[0] for lambda_slope in lambda_fit[2]]
+lambda_fit_tail_slope_error = [lambda_slope[1] for lambda_slope in lambda_fit[2]]
+lambda_fit_tail_chi2 = lambda_fit[3]
+
+# draw slope of lambda distribution as a function of expected event rate
+ax_lambda_slope_rate_func.errorbar(rate_bin_centers, lambda_fit_tail_slope, yerr=lambda_fit_tail_slope_error, linestyle='None', marker='o', markersize=3) #, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (omega_low, omega_high))
+ax_lambda_slope_rate_func = set_style(ax_lambda_slope_rate_func, '', r'$\Gamma \;(\mathrm{decade}^{-1})$', r'$\beta_{\Lambda}$', 12)
+
+# draw chi2 of fit of lambda distribution as a function of expected event rate
+ax_lambda_chi2_rate_func.plot(rate_bin_centers, lambda_fit_tail_chi2, linestyle='None', marker='o', markersize=3) #, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (dec_low, dec_high))
+ax_lambda_chi2_rate_func = set_style(ax_lambda_chi2_rate_func, '', r'$\Gamma \;(\mathrm{decade}^{-1})$', r'$\chi^2 / \mathrm{ndf}$', 12)
+
+fig_lambda_slope.tight_layout()
+fig_lambda_slope.savefig('./results/lambda_dist_slope_rate_func_IsotropicSkies_th%.0f.pdf' % np.degrees(theta_max))
+
 #-----------------------------------------
 # Plot the distribution of lambda and its comulative, along with the corresponing fits
 #-----------------------------------------
-dec_list  = [-85, -45, 0, 30]
-color_dec = {-85 : 'tab:red', -45 : 'tab:purple', 0 : 'tab:blue', 30 : 'darkblue'}
-
-#to plot lambda pdf and cdf for different declinations
 fig_lambda_dist = plt.figure(figsize=(10, 4))
-ax_lambda_pdf = fig_lambda_dist.add_subplot(121)
+ax_lambda_dist = fig_lambda_dist.add_subplot(121)
 ax_lambda_cdf = fig_lambda_dist.add_subplot(122)
 
-for dec in dec_list:
+#save the color map
+color_map = cm.get_cmap('coolwarm') #.reversed()
 
-    dec_low, dec_high, lambda_bin_centers, lambda_bin_content, lambda_bin_error, lambda_cont, lambda_tail_pdf, lambda_bin_cdf, fitted_cdf = get_fitted_lambda_dist(complete_fname_lambda, dec, theta_max, lat_pao)
+#define the list of colors
+color_array = np.linspace(0, 1, len(rate_bin_low_edges))
 
-    #for pdf
-    ax_lambda_pdf.errorbar(lambda_bin_centers, lambda_bin_content, yerr=lambda_bin_error, color = color_dec[dec], alpha = .5, linewidth=1, marker='o', markersize=1, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (dec_low, dec_high))
-    ax_lambda_pdf.plot(lambda_cont, lambda_tail_pdf, color = color_dec[dec])
+print(color_array)
 
-    #for cdf
-    ax_lambda_cdf.errorbar(lambda_bin_centers, lambda_bin_cdf, yerr=np.sqrt(lambda_bin_cdf) / sum(lambda_bin_content), color = color_dec[dec], alpha = 0.5, markersize=1, marker = 'o')
-    ax_lambda_cdf.plot(lambda_cont, fitted_cdf, color = color_dec[dec])
+for i, rate_low_edge in enumerate(rate_bin_low_edges):
 
-#lambda pdf for different declinations
-ax_lambda_pdf = set_style(ax_lambda_pdf, '', r'$\Lambda$', r'Arb. units', 12)
-ax_lambda_pdf.set_yscale('log')
-ax_lambda_pdf.legend(loc='upper right', fontsize = 12)
+    #save rate upper edge
+    rate_upper_edge = rate_bin_upper_edges[i]
 
-#lambda cdf for different declinations
-ax_lambda_cdf = set_style(ax_lambda_cdf, '', r'$\Lambda$', r'CDF($\Lambda$)', 12)
+    #define the fit range and save fit parameters
+    fit_range = np.linspace(lambda_fit[0][i], max(lambda_dist[0][i]), 1000)
+    fit_norm = lambda_fit[1][i][0]
+    fit_slope = lambda_fit[2][i][0]
+
+    #plot the lambda distribution
+    if rate_upper_edge % 3 == 0:
+    #if rate_upper_edge == 9.5:
+
+        ax_lambda_dist.errorbar(lambda_dist[0][i], lambda_dist[1][i] / sum(lambda_dist[1][i]), yerr=lambda_dist[2][i] / sum(lambda_dist[1][i]), color = color_map(color_array[i]), alpha = .5, linewidth = 1, linestyle='None', marker='o', markersize=1)
+        ax_lambda_dist.plot(fit_range, (fit_norm / sum(lambda_dist[1][i]))*np.exp(-fit_slope*fit_range), color = color_map(color_array[i]))
+
+    #plot the cdf lambda distribution
+    ax_lambda_cdf.plot(lambda_dist[0][i], 1 - lambda_dist[3][i], color = color_map(color_array[i]), alpha = .5, linestyle='None', marker='o', markersize=1)
+
+#style of axis to plot lambda distribution
+ax_lambda_dist = set_style(ax_lambda_dist, '', r'$\Lambda$', 'Prob. density', 12)
+ax_lambda_dist.set_yscale('log')
+ax_lambda_dist.set_ylim(1e-8,1)
+
+cb_lambda_dist = fig_lambda_dist.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=min(rate_bin_low_edges), vmax=max(rate_bin_upper_edges)), cmap=color_map), ax=ax_lambda_dist) #, cmap=color_map)
+cb_lambda_dist.ax.set_ylabel(r'$\Gamma \;(\mathrm{decade}^{-1})$', fontsize=12)
+
+#style of axis to plot lambda cdf
+ax_lambda_cdf = set_style(ax_lambda_cdf, '', r'$\Lambda$', '$\Lambda \; p-\mathrm{value}$', 12)
+ax_lambda_cdf.set_yscale('log')
+ax_lambda_cdf.set_ylim(1e-7,1)
+
+cb_lambda_cdf = fig_lambda_dist.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=min(rate_bin_low_edges), vmax=max(rate_bin_upper_edges)), cmap=color_map), ax=ax_lambda_cdf)
+cb_lambda_cdf.ax.set_ylabel(r'$\Gamma \;(\mathrm{decade}^{-1})$', fontsize=12)
 
 fig_lambda_dist.tight_layout()
 fig_lambda_dist.savefig('./results/lambda_distribution_IsotropicSkies_th%.0f.pdf' % np.degrees(theta_max))
-
-# ------------------------------------------
-# Plot slope of lambda dist as a function of declination (and exposure) along with fit chi2
-# ------------------------------------------
-fig_lambda_slope = plt.figure(figsize=(10,5))
-ax_lambda_slope_dir_exposure_func = fig_lambda_slope.add_subplot(121)
-ax_lambda_chi2_dir_exposure_func = fig_lambda_slope.add_subplot(122)
-
-#fit lambda distribution as a function of the declination
-dec_bin_centers, theo_directional_exposure, lambda_dist_tail_slope, lambda_dist_tail_slope_error, lambda_dist_tail_chi2 = get_fit_params_lambda_dist(complete_fname_lambda, theta_max, lat_pao)
-
-# draw slope of lambda distribution as a function of exposure and declination
-ax_lambda_slope_dir_exposure_func.errorbar(theo_directional_exposure, lambda_dist_tail_slope, yerr=lambda_dist_tail_slope_error, linestyle='None', marker='o', markersize=3) #, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (dec_low, dec_high))
-ax_lambda_slope_dec_func = ax_lambda_slope_dir_exposure_func.twiny()
-
-ax_lambda_slope_dec_func, ax_lambda_slope_dir_exposure_func = get_exposure_dec_axis(ax_lambda_slope_dec_func, ax_lambda_slope_dir_exposure_func, 8, theta_max, lat_pao)
-
-ax_lambda_slope_dir_exposure_func = set_style(ax_lambda_slope_dir_exposure_func, '', r'$\omega (\delta)$', r'$\beta_{\Lambda}$', 12)
-ax_lambda_slope_dec_func = set_style(ax_lambda_slope_dec_func, '', r'$\delta \;(^\circ)$', r'$\beta_{\Lambda}$', 12)
-
-# draw chi2 of fit of lambda distribution as a function of exposure and declination
-ax_lambda_chi2_dir_exposure_func.plot(theo_directional_exposure, lambda_dist_tail_chi2, linestyle='None', marker='o', markersize=3) #, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (dec_low, dec_high))
-ax_lambda_chi2_dec_func = ax_lambda_chi2_dir_exposure_func.twiny()
-
-ax_lambda_chi2_dec_func, ax_lambda_chi2_dir_exposure_func = get_exposure_dec_axis(ax_lambda_chi2_dec_func, ax_lambda_chi2_dir_exposure_func, 8, theta_max, lat_pao)
-
-ax_lambda_chi2_dir_exposure_func = set_style(ax_lambda_chi2_dir_exposure_func, '', r'$\omega (\delta)$', r'$\chi^2 / \mathrm{ndf}$', 12)
-ax_lambda_chi2_dec_func = set_style(ax_lambda_chi2_dec_func, '', r'$\delta \;(^\circ)$', r'$\chi^2 / \mathrm{ndf}$', 12)
-
-fig_lambda_slope.tight_layout()
-fig_lambda_slope.savefig('./results/lambda_dist_slope_dec_func_IsotropicSkies_th%.0f.pdf' % np.degrees(theta_max))
-
-#plt.plot(theo_directional_exposure, lambda_dist_tail_slope)
-#plt.show()
-
-#get the fit parameters
-#dec_bin_centers, theo_directional_exposure, lambda_dist_tail_slope, lambda_dist_tail_slope_error, lambda_dist_tail_slope_chi2 = get_fit_params_lambda_dist(complete_fname_lambda, theta_max, lat_pao)
-
-#lambda_bin_centers = np.array(lambda_data['lambda_bin_centers'].loc[0])
-#lambda_bin_content = np.array(lambda_data['lambda_bin_content'].loc[0])
-#lambda_bin_error = np.sqrt(lambda_bin_content)
-
-#mean = sum(lambda_bin_centers*lambda_bin_content) / sum(lambda_bin_content)
-#second_moment = sum((lambda_bin_centers**2)*lambda_bin_content) / sum(lambda_bin_content)
-#sigma = np.sqrt(second_moment - mean**2)
-
-#popt, perr, x, y, chi2 = fit_routines.perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, mean, sigma)
-
-#print(chi2)
-
-#plt.errorbar(theo_directional_exposure, lambda_dist_tail_slope, yerr=lambda_dist_tail_slope_error)
-#plt.plot(x, y, color='tab:orange')
-#plt.yscale('log')
-#plt.show()
-#bin_centers = lambda_data['']

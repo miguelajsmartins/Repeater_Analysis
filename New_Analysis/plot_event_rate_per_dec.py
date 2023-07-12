@@ -153,7 +153,7 @@ bin_centers_omega, bin_content_omega, lower_band_omega, upper_band_omega = data_
 fig_exposure_dec = plt.figure(figsize=(5, 4))
 ax_exposure_dec = fig_exposure_dec.add_subplot(111)
 
-ax_exposure_dec.plot(bin_centers_omega, bin_content_omega, color = 'tab:blue', label=r'$\langle \omega(\delta) \rangle$ from $10^3$ realizations of iso. sky')
+ax_exposure_dec.plot(bin_centers_omega, bin_content_omega, color = 'tab:blue', label=r'$\langle \omega(\delta) \rangle$ from $10^3$ iso. skies')
 ax_exposure_dec.plot(np.sin(dec_cont), theo_directional_exposure, color = 'tab:red', linestyle='dashed', label = 'Theoretical expectation')
 ax_exposure_dec.fill_between(bin_centers_omega, lower_band_omega, upper_band_omega, alpha = .5)
 ax_exposure_dec = set_style(ax_exposure_dec, '', r'$\sin (\delta)$', r'$\omega(\delta)$', 12)
@@ -168,7 +168,8 @@ fig_exposure_dec.savefig('./results/directional_exposure_dec_func_Theory_%i_Isot
 NSIDE = 128
 obs_time = 10 #in years, maybe this should be more flexible
 n_events = 1e5 #this should be more flexible
-area_of_target = 2*np.pi*(1 - np.cos(np.radians(1)))
+radius_of_target = 1
+area_of_target = 2*np.pi*(1 - np.cos(np.radians(radius_of_target)))
 
 #compute theoretical number of events per bin
 theo_event_number_per_bin = (.5 / np.pi)*theo_directional_exposure*n_events*area_of_target
@@ -183,18 +184,18 @@ ax_event_number_dec = fig_event_number_dec.add_subplot(121)
 ax_event_rate_dec = fig_event_number_dec.add_subplot(122)
 
 #for event number
-ax_event_number_dec.plot(bin_centers_event_density, bin_content_event_density, color = 'tab:blue', label=r'Average from $10^3$ realizations of iso. sky')
+ax_event_number_dec.plot(bin_centers_event_density, bin_content_event_density, color = 'tab:blue', label=r'Average from $10^3$ iso. skies')
 ax_event_number_dec.plot(np.sin(dec_cont), theo_event_number_per_bin, color = 'tab:red', linestyle='dashed', label = 'Theoretical expectation')
 ax_event_number_dec.fill_between(bin_centers_event_density, lower_band_event_density, upper_band_event_density, alpha = .5)
-ax_event_number_dec = set_style(ax_event_number_dec, '', r'$\sin (\delta)$', r'Events per pixel', 12)
-ax_event_number_dec.legend(loc='upper right', title = r'$10^5$ events in $10$ yrs. $A_{\mathrm{target}} = %.5f$ sr' % area_of_target, title_fontsize = 12, fontsize = 12)
+ax_event_number_dec = set_style(ax_event_number_dec, '', r'$\sin (\delta)$', r'Events per target', 12)
+ax_event_number_dec.legend(loc='upper right', title = r'$10^5$ events in $10$ yrs. $\psi_{\mathrm{target}} = %.0f^\circ$' % radius_of_target , title_fontsize = 12, fontsize = 12)
 
 #for event rate
-ax_event_rate_dec.plot(bin_centers_event_density, bin_content_event_density / obs_time, color = 'tab:blue', label=r'Average from $10^3$ realizations of iso. sky')
+ax_event_rate_dec.plot(bin_centers_event_density, bin_content_event_density / obs_time, color = 'tab:blue', label=r'Average from $10^3$ iso. skies')
 ax_event_rate_dec.plot(np.sin(dec_cont), theo_event_rate_per_bin, color = 'tab:red', linestyle='dashed', label = 'Theoretical expectation')
 ax_event_rate_dec.fill_between(bin_centers_event_density, lower_band_event_density / obs_time, upper_band_event_density / obs_time, alpha = .5)
 ax_event_rate_dec = set_style(ax_event_rate_dec, '', r'$\sin (\delta)$', r'$\Gamma \;(\mathrm{yr}^{-1})$', 12)
-ax_event_rate_dec.legend(loc='upper right', title = r'$10^5$ events in $10$ yrs. $A_{\mathrm{target}} = %.5f$ sr' % area_of_target, title_fontsize = 12, fontsize = 12)
+ax_event_rate_dec.legend(loc='upper right', title = r'$10^5$ events in $10$ yrs. $\psi_{\mathrm{target}} = %.0f^\circ$' % radius_of_target, title_fontsize = 12, fontsize = 12)
 
 fig_event_number_dec.tight_layout()
-fig_event_number_dec.savefig('./results/event_rate_per_skybin_data_theo_%i_IsotropicSkies_th%.0f.pdf' % (n_files, np.degrees(theta_max)))
+fig_event_number_dec.savefig('./results/event_rate_per_target_data_theo_%i_IsotropicSkies_th%.0f.pdf' % (n_files, np.degrees(theta_max)))

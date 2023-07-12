@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+
 import matplotlib.pyplot as plt
 from astropy.coordinates import EarthLocation
 import astropy.units as u
@@ -31,7 +32,7 @@ def get_lambda_dist_per_dec(list_of_files):
     upper_error_band = []
 
     #define the bins in declination
-    dec_bin_edges = np.linspace(-90, 90, 37)
+    dec_bin_edges = np.linspace(-90, 90, 91)
     dec_bin_centers = hist_manip.get_bin_centers(dec_bin_edges)
     dec_bin_width = hist_manip.get_bin_width(dec_bin_edges)
 
@@ -64,14 +65,68 @@ def get_lambda_dist_per_dec(list_of_files):
     lambda_dist_edges = np.linspace(-10, 70, 200)
     lambda_bin_centers = hist_manip.get_bin_centers(lambda_dist_edges)
 
+    #compute the .9 quantile of the Lambda distribution
+    quantile_99 = [np.nanquantile(lambda_dist, .99) if len(lambda_dist) > 0 else np.nan for lambda_dist in total_lambda_dist_per_dec_bin]
     lambda_bin_content_array = np.array([data_2_binned_content(lambda_dist, lambda_dist_edges, lambda_dist_edges[0], lambda_dist_edges[-1], np.ones(len(lambda_dist)), False) for lambda_dist in total_lambda_dist_per_dec_bin ])
     lambda_bin_centers = np.array([lambda_bin_centers for i in range(len(dec_bin_centers))])
 
     #build dataframe with lambda_dist
-    lambda_dist_df = pd.DataFrame(zip(dec_bin_edges[:-1], dec_bin_edges[1:], lambda_bin_centers, lambda_bin_content_array), columns=['dec_low_edges', 'dec_upper_edges', 'lambda_bin_centers', 'lambda_bin_content'])
+    lambda_dist_df = pd.DataFrame(zip(dec_bin_edges[:-1], dec_bin_edges[1:], lambda_bin_centers, lambda_bin_content_array, quantile_99), columns=['dec_low_edges', 'dec_upper_edges', 'lambda_bin_centers', 'lambda_bin_content', 'lambda_dist_quantile_99'])
 
     return lambda_dist_df
 
+#maybe consider merging this function with the previous one
+def get_lambda_dist_per_rate(list_of_files):
+
+    bin_contents_list = []
+    bin_error_95 = []
+    lambda_dist_list = []
+    lower_error_band = []
+    upper_error_band = []
+
+    #define the bins in declination
+    omega_bin_edges = np.linspace(0, 19, 39)
+    omega_bin_centers = hist_manip.get_bin_centers(omega_bin_edges)
+    omega_bin_width = hist_manip.get_bin_width(omega_bin_edges)
+
+    #loop over files
+    for i, file in enumerate(list_of_files):
+
+        data = pd.read_parquet(file, engine='fastparquet')
+
+        omega_data = data['expected_events_in_target'].to_numpy()
+        lambda_values = data['lambda'].to_numpy()
+
+        lambda_values = [lambda_values[np.where( (omega_data > omega_bin_edges[j -1 ]) & (omega_data < omega_bin_edges[j]))[0]] for j in range(1, len(omega_bin_edges))]
+
+        #lambda_values = np.array(lambda_values)
+
+        lambda_dist_list.append(lambda_values)
+
+    #transform list into array
+    lambda_values_array = np.array(lambda_dist_list, dtype=list)
+
+    #transpose
+    lambda_dist_per_omega_bin = np.transpose(lambda_values_array)
+
+    #print(lambda_dist_per_omega_bin.shape)
+    total_lambda_dist_per_omega_bin = np.array([np.concatenate(lambda_dist).ravel() for lambda_dist in lambda_dist_per_omega_bin], dtype=object)
+
+    #print(total_lambda_dist_per_omega_bin[0])
+
+    #create limits for lambda dist
+    lambda_dist_edges = np.linspace(-10, 70, 200)
+    lambda_bin_centers = hist_manip.get_bin_centers(lambda_dist_edges)
+
+    #compute the .9 quantile of the Lambda distribution
+    quantile_99 = [np.nanquantile(lambda_dist, .95) if len(lambda_dist) > 0 else np.nan for lambda_dist in total_lambda_dist_per_omega_bin]
+    lambda_bin_content_array = np.array([data_2_binned_content(lambda_dist, lambda_dist_edges, lambda_dist_edges[0], lambda_dist_edges[-1], np.ones(len(lambda_dist)), False) for lambda_dist in total_lambda_dist_per_omega_bin ])
+    lambda_bin_centers = np.array([lambda_bin_centers for i in range(len(omega_bin_centers))])
+
+    #build dataframe with lambda_dist
+    lambda_dist_df = pd.DataFrame(zip(omega_bin_edges[:-1], omega_bin_edges[1:], lambda_bin_centers, lambda_bin_content_array, quantile_99), columns=['omega_low_edges', 'omega_upper_edges', 'lambda_bin_centers', 'lambda_bin_content', 'lambda_dist_quantile_99'])
+
+    return lambda_dist_df
 
 #save names of files containing events
 path_to_files = './datasets/estimators/'
@@ -94,11 +149,14 @@ height_pao = 1425*u.meter # this is the average altitude
 #define the earth location corresponding to pierre auger observatory
 pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
 
-lambda_dist = get_lambda_dist_per_dec(file_list)
+lambda_dist_per_dec = get_lambda_dist_per_dec(file_list)
+lambda_dist_per_rate = get_lambda_dist_per_rate(file_list)
 
-print(lambda_dist.head(10))
+print(lambda_dist_per_dec.head(20))
+print(lambda_dist_per_rate.head(20))
 
-lambda_dist.to_json('./datasets/estimator_dist/Lambda_dist_per_dec_%i.json' % len(file_list), index = True)
+lambda_dist_per_dec.to_json('./datasets/estimator_dist/Lambda_dist_per_dec_%i.json' % len(file_list), index = True)
+lambda_dist_per_rate.to_json('./datasets/estimator_dist/Lambda_dist_per_rate_%i.json' % len(file_list), index = True)
 
 # #save the pdf of the directional exposure for each bin in sin(dec)
 # low_lims = [-90, -40, 0]

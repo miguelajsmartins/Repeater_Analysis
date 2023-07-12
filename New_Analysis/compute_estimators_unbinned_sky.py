@@ -84,27 +84,32 @@ def compute_estimators(event_data, rate, target_radius, time_window, theta_max, 
         ra_target = event_ra[i]
 
         #exclude events based on declination and right ascension
-        in_square = (np.abs(dec_target - event_dec) < target_radius) #& (np.abs(ra_target - event_ra) < target_radius)
+        in_strip = (np.abs(dec_target - event_dec) < target_radius) #& (np.abs(ra_target - event_ra) < target_radius)
 
-        events_in_square_dec = event_dec[in_square]
-        events_in_square_ra = event_ra[in_square]
-        events_in_square_time = event_time[in_square]
+        events_in_strip_dec = event_dec[in_strip]
+        events_in_strip_ra = event_ra[in_strip]
+        events_in_strip_time = event_time[in_strip]
 
         #compute the angular difference between center of each target and all other events within target radius
-        ang_diffs = ang_diff(dec_target, events_in_square_dec, ra_target, events_in_square_ra)
+        ang_diffs = ang_diff(dec_target, events_in_strip_dec, ra_target, events_in_strip_ra)
 
         #keep only events in target
-        event_indices_in_target = (ang_diffs < target_radius) & (ang_diffs > 0)
+        event_indices_in_target = (ang_diffs < target_radius) & (ang_diffs != 0)
 
         #save the arrival times of the events in the target region
-        events_in_target_time = events_in_square_time[event_indices_in_target]
+        events_in_target_time = events_in_strip_time[event_indices_in_target]
+
+        if ( (np.abs(np.degrees(dec_target) + 27.5) < 1) and (np.abs(np.degrees(ra_target) - 181.5) < 1)) :
+            print('dec_target =', np.degrees(dec_target))
+            print('events in target', events_in_target_time.shape)
 
         #compute Li Ma significance for a given target
         exposure_on, exposure_off, LiMa_significance = unbinned_local_LiMa_significance(n_events, events_in_target_time, area_of_target, integrated_exposure, dec_target, theta_max, pao_lat)
 
-        #print(sum(exposure_fullsky))
-        #print(exposure_on)
-        #print(exposure_off)
+        if ( (np.abs(np.degrees(dec_target) + 27.5) < 1) and (np.abs(np.degrees(ra_target) - 181.5) < 1)) :
+            print('expected_events_in_target', exposure_on*n_events)
+            print('Li Ma significance', LiMa_significance)
+
 
         if len(events_in_target_time) <= 1:
             tau = np.nan
@@ -128,7 +133,6 @@ def compute_estimators(event_data, rate, target_radius, time_window, theta_max, 
 
             #computes tau and lambda
             local_rate = rate*exposure_on
-
             tau = delta_times[0]*local_rate
             lambda_estimator = -np.sum(np.log(delta_times*local_rate))
 
@@ -166,7 +170,7 @@ if not os.path.exists(filename):
 #save path to file and its basename
 path_input = os.path.dirname(filename)
 basename = os.path.splitext(os.path.basename(filename))[0]
-path_output = './' + path_input.split('/')[1] + '/estimators'
+#path_output = './' + path_input.split('/')[1] + '/estimators'
 
 #save dataframe with isotropic events
 event_data = pd.read_parquet(filename, engine = 'fastparquet')
@@ -186,9 +190,6 @@ pao_loc = EarthLocation(lon=pao_long*u.rad, lat=pao_lat*u.rad, height=pao_height
 #defines the maximum declination and a little tolerance
 theta_max = np.radians(80)
 dec_max = pao_lat + theta_max
-
-#defines the NSIDE parameter
-NSIDE = 128
 
 #defines the time window
 time_window = [86_164, 7*86_164, 30*86_164] #consider a time window of a single day
@@ -215,4 +216,4 @@ print(estimator_data)
 print(estimator_data.describe())
 
 #saves estimator data
-estimator_data.to_parquet(path_output + '/' + basename + '_Estimators.parquet', index = True)
+estimator_data.to_parquet(path_input + '/' + basename + '_Estimators.parquet', index = True)

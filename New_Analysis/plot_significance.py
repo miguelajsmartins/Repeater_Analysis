@@ -22,43 +22,41 @@ plt.rcParams.update({
 })
 
 #maybe consider merging this function with the previous one
-# def get_Lambda_p_value_dist(list_of_files):
-#
-#     #initialize the li ma significance list
-#     LiMa_significance_bin_content = []
-#     lower_error_band = []
-#     upper_error_band = []
-#
-#     #loop over files
-#     for i, file in enumerate(list_of_files):
-#
-#         data = pd.read_parquet(file, engine='fastparquet')
-#
-#         if 'lambda_p_value' not in data.columns:
-#             continue
-#
-#         LiMa_significance = data['lambda_p_value'].to_numpy()
-#
-#         plt.hist(LiMa_significance, bins = 100, range = [0, 1])
-#         plt.show()
-#
-#         bin_centers, bin_contents, bin_error = data_2_binned_errorbar(LiMa_significance, 100, 0, 1, np.ones(len(LiMa_significance)), False)
-#
-#         if i == 0:
-#             LiMa_significance_bin_centers = bin_centers
-#
-#         LiMa_significance_bin_content.append(bin_contents)
-#
-#     #compute average Li Ma significance
-#     average_bin_content = np.mean(LiMa_significance_bin_content, axis = 0)
-#
-#     #compute bands corresponding to 1 sigma
-#     fluctuations = np.std(LiMa_significance_bin_content, axis = 0)
-#
-#     lower_error_band = average_bin_content - 2*fluctuations
-#     upper_error_band = average_bin_content + 2*fluctuations
-#
-#     return LiMa_significance_bin_centers, average_bin_content, lower_error_band, upper_error_band
+def get_Lambda_p_value_dist(list_of_files):
+
+     #initialize the li ma significance list
+     LiMa_significance_bin_content = []
+     lower_error_band = []
+     upper_error_band = []
+
+     #loop over files
+     for i, file in enumerate(list_of_files[:100]):
+
+         data = pd.read_parquet(file, engine='fastparquet')
+
+         #print(data.head())
+
+         LiMa_significance = data['lambda_p_value'].to_numpy()
+
+         bin_centers, bin_contents, bin_error = data_2_binned_errorbar(np.log10(LiMa_significance), 50, -8, 0, np.ones(len(LiMa_significance)), False)
+
+         if i == 0:
+             LiMa_significance_bin_centers = bin_centers
+
+         LiMa_significance_bin_content.append(bin_contents)
+
+         print('Read', i, '/', len(list_of_files))
+
+     #compute average Li Ma significance
+     average_bin_content = np.mean(LiMa_significance_bin_content, axis = 0)
+
+     #compute bands corresponding to 1 sigma
+     fluctuations = np.std(LiMa_significance_bin_content, axis = 0)
+
+     lower_error_band = average_bin_content - 2*fluctuations
+     upper_error_band = average_bin_content + 2*fluctuations
+
+     return LiMa_significance_bin_centers, average_bin_content, lower_error_band, upper_error_band
 
 #maybe consider merging this function with the previous one
 def get_LiMa_significance_dist(list_of_files):
@@ -73,12 +71,9 @@ def get_LiMa_significance_dist(list_of_files):
 
         data = pd.read_parquet(file, engine='fastparquet')
 
-        #restrict regions with appreceable exposure
-        data = data[data['dec_center'] < 0]
-
         LiMa_significance = data['LiMa_significance'].to_numpy()
 
-        bin_centers, bin_contents, bin_error = data_2_binned_errorbar(LiMa_significance, 100, -6, 6, np.ones(len(LiMa_significance)), False)
+        bin_centers, bin_contents, bin_error = data_2_binned_errorbar(LiMa_significance, 50, -5, 5, np.ones(len(LiMa_significance)), False)
 
         if i == 0:
             LiMa_significance_bin_centers = bin_centers
@@ -99,43 +94,85 @@ def get_LiMa_significance_dist(list_of_files):
 #save names of files containing events
 #path_to_files = './datasets/scrambled_events/'
 path_to_files_estimator = './datasets/estimators'
-estimator_filelist = []
+LiMa_filelist = []
+Lambda_filelist = []
 
 # Loop over files in the directory
 for filename in os.listdir(path_to_files_estimator):
 
     f = os.path.join(path_to_files_estimator, filename)
 
-    if os.path.isfile(f) and 'Scrambled' in f:
+    if os.path.isfile(f):
+        if 'LambdaPValue' not in f:
+            LiMa_filelist.append(f)
+        else:
+            Lambda_filelist.append(f)
 
-        estimator_filelist.append(f)
-
-print(estimator_filelist)
+#save file with flares
+iso_flare_file = './datasets/events_with_flares/UniformDist_100000_acceptance_th80_2010-01-01_2020-01-01_nFlare_100_nEventsPerFlare_5_FlareDuration_86164_Estimators.parquet'
+iso_flare_lambda_file = './datasets/events_with_flares/UniformDist_100000_acceptance_th80_2010-01-01_2020-01-01_nFlare_100_nEventsPerFlare_5_FlareDuration_86164_LambdaPValue.parquet'
+iso_flare_data = pd.read_parquet(iso_flare_file, engine = 'fastparquet')
+iso_flare_lambda_pvalue = pd.read_parquet(iso_flare_lambda_file, engine = 'fastparquet')
 
 #compute the LiMa significance distribution
-LiMa_significance_bin_centers, LiMa_average_bin_content, LiMa_lower_error_band, LiMa_upper_error_band = get_LiMa_significance_dist(estimator_filelist)
-#Lambda_pvalue_bin_centers, Lambda_average_bin_content, Lambda_lower_error_band, Lambda_upper_error_band = get_Lambda_p_value_dist(estimator_filelist)
+LiMa_significance_bin_centers, LiMa_average_bin_content, LiMa_lower_error_band, LiMa_upper_error_band = get_LiMa_significance_dist(LiMa_filelist)
+Lambda_pvalue_bin_centers, Lambda_average_bin_content, Lambda_lower_error_band, Lambda_upper_error_band = get_Lambda_p_value_dist(Lambda_filelist)
+flare_LiMa_bin_centers, flare_LiMa_bin_content, flare_LiMa_bin_error = data_2_binned_errorbar(iso_flare_data['LiMa_significance'], 50, -5, 5, np.ones(len(iso_flare_data.index)), False)
+flare_Lambda_pvalue_bin_centers, flare_Lambda_pvalue_bin_content, flare_Lambda_pvalue_bin_error = data_2_binned_errorbar(np.log10(iso_flare_lambda_pvalue['lambda_p_value']), 50, -8, 0, np.ones(len(iso_flare_data.index)), False)
 
+LiMa_significance_cont = np.linspace(-5, 5, 1000)
+Lambda_pvalue_cont = np.linspace(-7, 0, 1000)
 #defines maximum zenith angle
 theta_max = np.radians(80)
 
 #plot the significances
 fig_significance = plt.figure(figsize=(10, 4))
-ax_LiMa_significance = fig_significance.add_subplot(121)
-ax_lambda_pvalue = fig_significance.add_subplot(122)
+fig_lambda_pvalue = plt.figure(figsize=(10, 4))
 
-ax_LiMa_significance.plot(LiMa_significance_bin_centers, LiMa_average_bin_content, color = 'tab:blue', label=r'$10^3$ realizations of iso. sky')
-ax_LiMa_significance.fill_between(LiMa_significance_bin_centers, LiMa_lower_error_band, LiMa_upper_error_band, alpha = .5)
-ax_LiMa_significance = set_style(ax_LiMa_significance, '', r'$\sigma_{\mathrm{LiMa}}$', r'Arb. units', 12)
+ax_LiMa_significance_log = fig_significance.add_subplot(121)
+ax_LiMa_significance = fig_significance.add_subplot(122)
+ax_lambda_pvalue = fig_lambda_pvalue.add_subplot(122)
+
+integral_LiMa_significance = np.trapz(LiMa_average_bin_content, x=LiMa_significance_bin_centers)
+ax_LiMa_significance_log.plot(LiMa_significance_bin_centers, LiMa_average_bin_content / integral_LiMa_significance , color = 'tab:blue', label=r'$10^3$ iso. skies')
+ax_LiMa_significance_log.plot(flare_LiMa_bin_centers, flare_LiMa_bin_content / np.trapz(flare_LiMa_bin_content, x=flare_LiMa_bin_centers), color = 'tab:orange', label=r'Sample with flares')
+ax_LiMa_significance_log.fill_between(LiMa_significance_bin_centers, LiMa_lower_error_band / integral_LiMa_significance, LiMa_upper_error_band / integral_LiMa_significance, alpha = .5)
+ax_LiMa_significance_log.plot(LiMa_significance_cont, (1 / np.sqrt(2*np.pi) )*np.exp(-LiMa_significance_cont**2 / 2), color = 'tab:red', linestyle='dashed', label='Gaussian')
+ax_LiMa_significance_log = set_style(ax_LiMa_significance_log, '', r'$\sigma_{\mathrm{LiMa}}$', r'Prob. density', 12)
+ax_LiMa_significance_log.set_yscale('log')
+ax_LiMa_significance_log.set_ylim(1e-6, 1)
+ax_LiMa_significance_log.legend(loc='upper right', fontsize = 12)
+
+ax_LiMa_significance.plot(LiMa_significance_bin_centers, np.ones(len(LiMa_significance_bin_centers)), color = 'tab:blue', label=r'$10^3$ iso. skies')
+ax_LiMa_significance.plot(flare_LiMa_bin_centers, flare_LiMa_bin_content / LiMa_average_bin_content, color = 'tab:orange', label=r'Sample with flares')
+ax_LiMa_significance.fill_between(LiMa_significance_bin_centers, LiMa_lower_error_band / LiMa_average_bin_content, LiMa_upper_error_band / LiMa_average_bin_content, alpha = .5)
+#ax_LiMa_significance.plot(LiMa_significance_cont, (1 / np.sqrt(2*np.pi) )*np.exp(-LiMa_significance_cont**2 / 2), color = 'tab:red', linestyle='dashed', label='Gaussian')
+ax_LiMa_significance = set_style(ax_LiMa_significance, '', r'$\sigma_{\mathrm{LiMa}}$', r'Ratio to average', 12)
+ax_LiMa_significance.set_ylim(0, 5)
 ax_LiMa_significance.legend(loc='upper right', fontsize = 12)
 
-#ax_lambda_pvalue.plot(Lambda_pvalue_bin_centers, Lambda_average_bin_content, color = 'tab:blue', label=r'$10^3$ realizations of iso. sky')
-#ax_lambda_pvalue.fill_between(Lambda_pvalue_bin_centers, Lambda_lower_error_band, Lambda_upper_error_band, alpha = .5)
-#ax_lambda_pvalue = set_style(ax_lambda_pvalue, '', r'$\Lambda$ $p$-value', r'Arb. units', 12)
-#ax_lambda_pvalue.legend(loc='upper right', fontsize = 12)
+integral_average_Lambda_pvalue = np.trapz(Lambda_average_bin_content, x=Lambda_pvalue_bin_centers)
+integral_upper_Lambda_pvalue = np.trapz(Lambda_upper_error_band, x=Lambda_pvalue_bin_centers)
+integral_lower_Lambda_pvalue = np.trapz(Lambda_lower_error_band, x=Lambda_pvalue_bin_centers)
+
+print(integral_average_Lambda_pvalue)
+print(integral_lower_Lambda_pvalue)
+print(integral_upper_Lambda_pvalue)
+
+ax_lambda_pvalue.plot(Lambda_pvalue_bin_centers, Lambda_average_bin_content / integral_average_Lambda_pvalue, color = 'tab:blue', label=r'$10^3$ iso. skies')
+ax_lambda_pvalue.plot(flare_Lambda_pvalue_bin_centers, flare_Lambda_pvalue_bin_content / np.trapz(flare_Lambda_pvalue_bin_content, x=flare_Lambda_pvalue_bin_centers), color = 'tab:orange', label=r'Sample with flares')
+ax_lambda_pvalue.fill_between(Lambda_pvalue_bin_centers, Lambda_lower_error_band / integral_lower_Lambda_pvalue, Lambda_upper_error_band / integral_upper_Lambda_pvalue, alpha = .5)
+ax_lambda_pvalue.plot(Lambda_pvalue_cont, np.log(10)*np.power(10, Lambda_pvalue_cont), color = 'tab:red', linestyle='dashed', label=r'Uniform')
+ax_lambda_pvalue = set_style(ax_lambda_pvalue, '', r'$\log_{10} (\Lambda$ $p$-value)', r'Arb. units', 12)
+ax_lambda_pvalue.legend(loc='upper left', fontsize = 12)
+ax_lambda_pvalue.set_ylim(1e-8, 3)
+ax_lambda_pvalue.set_yscale('log')
 
 fig_significance.tight_layout()
+fig_lambda_pvalue.tight_layout()
+
 fig_significance.savefig('./results/LiMa_and_Lambda_significances_th%.0f.pdf' % np.degrees(theta_max))
+fig_lambda_pvalue.savefig('./results/Lambda_pvalues_th%.0f.pdf' % np.degrees(theta_max))
 
 # --------------------
 # Notes: this code is not efficient because it loops more than once over many files. Change this
