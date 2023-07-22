@@ -67,8 +67,8 @@ start_date = Time(start_date_fits + 'T00:00:00', format = 'fits', scale='utc', l
 end_date = Time(end_date_fits + 'T00:00:00', format = 'fits', scale='utc', location=pao_loc).gps
 
 #define the number of events
-n_events = 1_000_000
-n_accept = int(n_events / 10)
+n_events = 2_000_000
+n_accept = int(n_events / 4)
 
 #define the maximum accepted zenith angle
 theta_max = np.radians(80)
@@ -90,6 +90,7 @@ start = datetime.now()
 
 accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = compute_accepted_events(time, ra, dec, lat_pao, theta_max)
 
+print('Efficiency in accepting events =', len(accepted_time) / n_events)
 print('This took ', datetime.now() - start, ' s')
 
 #accept only the first 100_000 events
@@ -102,4 +103,4 @@ accepted_event_data = pd.DataFrame(zip(accepted_time, np.degrees(accepted_ra), n
 
 print(accepted_event_data)
 
-accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80_%s_%s_4.parquet' % (int(n_accept), start_date_fits, end_date_fits), index=True)
+accepted_event_data.to_parquet('./datasets/UniformDist_%i_acceptance_th80_%s_%s.parquet' % (int(n_accept), start_date_fits, end_date_fits), index=True)

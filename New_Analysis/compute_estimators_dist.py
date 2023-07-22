@@ -119,7 +119,7 @@ def get_lambda_dist_per_rate(list_of_files):
     lambda_bin_centers = hist_manip.get_bin_centers(lambda_dist_edges)
 
     #compute the .9 quantile of the Lambda distribution
-    quantile_99 = [np.nanquantile(lambda_dist, .95) if len(lambda_dist) > 0 else np.nan for lambda_dist in total_lambda_dist_per_omega_bin]
+    quantile_99 = [np.nanquantile(lambda_dist, .99) if len(lambda_dist) > 0 else np.nan for lambda_dist in total_lambda_dist_per_omega_bin]
     lambda_bin_content_array = np.array([data_2_binned_content(lambda_dist, lambda_dist_edges, lambda_dist_edges[0], lambda_dist_edges[-1], np.ones(len(lambda_dist)), False) for lambda_dist in total_lambda_dist_per_omega_bin ])
     lambda_bin_centers = np.array([lambda_bin_centers for i in range(len(omega_bin_centers))])
 

@@ -16,6 +16,7 @@ def get_bin_width(bin_edges):
     else:
         return bin_widths
 
+#WARNING: the error is NOOOTTTT being well computed in case of weighted bins
 #plot error bar from 1d numpy array or series
 def data_2_binned_errorbar(data, nbins, bin_lower, bin_upper, weights, is_density):
 

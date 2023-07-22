@@ -56,15 +56,23 @@ def get_flare_events(flare_data, flare_duration, initial_events_per_flare, final
     accepted_time_indices = unsorted_search(event_times, accepted_event_times)
 
     accepted_event_ra, accepted_event_dec, accepted_event_theta, accepted_event_lst = event_ra[accepted_time_indices], event_dec[accepted_time_indices], event_theta[accepted_time_indices], event_lst[accepted_time_indices]
+    accepted_flare_ra = np.concatenate(np.transpose(np.array([flare_ra for i in range(final_events_per_flare)])))
+    accepted_flare_dec = np.concatenate(np.transpose(np.array([flare_dec for i in range(final_events_per_flare)])))
 
+    #accepted_flare_dec =
     #save flare events in dataframe
     flare_events = pd.DataFrame(zip(accepted_event_times, np.degrees(accepted_event_ra), np.degrees(accepted_event_dec), np.degrees(accepted_event_theta), np.degrees(accepted_event_lst)), columns=['gps_time', 'ra', 'dec', 'theta', 'lst'])
+
+    flare_events['is_from_flare'] = pd.Series(np.full(len(flare_events.index), True, dtype=bool))
+    flare_events['flare_dec'] = pd.Series(np.degrees(accepted_flare_dec))
+    flare_events['flare_ra'] = pd.Series(np.degrees(accepted_flare_ra))
 
     return flare_events
 
 #load events from isotropic distribution
-if (len(sys.argv) < 2):
-    print('Must give a file containing isotropic distribution of events and index of file')
+#define the number of flares, events per flare and duration of flare in seconds
+if (len(sys.argv) < 5):
+    print('You must give file to contaminate, number of flares, number of evenents per flare and duration of flare in days')
     exit()
 
 #save file name
@@ -82,7 +90,12 @@ basename = os.path.splitext(os.path.basename(filename))[0]
 #save dataframe with isotropic events
 event_data = pd.read_parquet(filename, engine = 'fastparquet')
 
-print(event_data)
+#flag events that are not from explosion
+event_data['is_from_flare'] = pd.Series(np.full(len(event_data.index), False, dtype=bool))
+event_data['flare_dec'] = pd.Series(np.full(len(event_data.index), np.nan))
+event_data['flare_ra'] = pd.Series(np.full(len(event_data.index), np.nan))
+
+print(event_data.head(10))
 
 #save dataframe with flares
 flare_catalog = './datasets/MockFlares_1000_2010-01-01_2020-01-01.parquet'
@@ -102,11 +115,11 @@ theta_max = np.radians(80)
 #filter flares outside field of view of observatory
 flare_data = flare_data[flare_data['dec_flare'] < np.degrees(theta_max + lat_pao)]
 
-#define the number of flares, events per flare and duration of flare in seconds
-n_flares = 1
-flare_duration = 86_164
-initial_events_per_flare = 1000
-final_events_per_flare = 100
+n_flares = int(sys.argv[2])
+flare_duration_days = int(sys.argv[3])
+flare_duration = int(sys.argv[3])*86_164
+final_events_per_flare = int(sys.argv[4])
+initial_events_per_flare = 100*final_events_per_flare
 
 #define the angular resolution
 ang_resol = np.radians(1)
@@ -139,5 +152,14 @@ print(event_data)
 
 print('Producing isotropic sample with flare events took', datetime.now() - start_time,'s')
 
+output_path = './datasets/events_with_flares/'
+
+#create directory whose name includes number of flares and events per flare
+output_dir = 'nFlares_%i_nEventsPerFlare_%i_FlareDuration_%i' % (n_flares, final_events_per_flare, flare_duration_days)
+output_path = output_path + output_dir
+
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
+
 #save scrambled events
-event_data.to_parquet(os.path.join(path_name, 'events_with_flares/' + basename + '_nFlare_%i_nEventsPerFlare_%i_FlareDuration_%i.parquet' % (n_flares, final_events_per_flare, flare_duration)), index=True)
+event_data.to_parquet(os.path.join(output_path, basename + '_nFlare_%i_nEventsPerFlare_%i_FlareDuration_%i.parquet' % (n_flares, final_events_per_flare, flare_duration_days)), index=True)
