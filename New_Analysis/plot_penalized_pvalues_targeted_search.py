@@ -72,8 +72,8 @@ basename = os.path.splitext(os.path.basename(penalized_pvalue_file))[0]
 split_name = basename.split('_')
 split_path = output_path.split('/')
 
-output_name_skymap = 'Skymap_' + split_name[0] + '_' + split_name[1] + '_pvalues_' + split_name[3] + '_' + split_path[3] + '.png'
-output_name_dist = 'Dist_' + split_name[0] + '_' + split_name[1] + '_pvalues_' + split_name[3] + '_' + split_path[3] + '.png'
+output_name_skymap = 'Skymap_' + split_name[0] + '_' + split_name[1] + '_pvalues_' + split_name[3] + '_' + split_path[3] + '.pdf'
+output_name_dist = 'Dist_' + split_name[0] + '_' + split_name[1] + '_pvalues_' + split_name[3] + '_' + split_path[3] + '.pdf'
 
 #save the number of flares, events per flare and flare duration
 n_flares = split_name[9]
@@ -100,7 +100,7 @@ color_map = cm.get_cmap('coolwarm').reversed()
 #define the limits of the color scale for plotting
 upper_limit_cb = 0
 lower_limit_cb = min([log_lambda_penalized_pvalue.min(), log_poisson_penalized_pvalue.min()])
-lower_limit_cb = round_up(lower_limit_cb)
+lower_limit_cb = round_down(lower_limit_cb)
 log_pvalue_range = upper_limit_cb - lower_limit_cb
 
 #define the color of the markers for each pvalue, according to their value
@@ -124,18 +124,33 @@ ax_skymap_lambda_pvalue.grid()
 
 #define the style of axis
 title = r'$n_{\mathrm{flares}} = %s$, $n_{\mathrm{events}} = %s$, $\Delta T_{\mathrm{flare}} = %s$ days' % (n_flares, n_events, flare_duration)
-ax_skymap_lambda_pvalue = set_style(ax_skymap_lambda_pvalue, title, r'$\alpha$', r'$\delta$', 12)
-ax_skymap_poisson_pvalue = set_style(ax_skymap_poisson_pvalue, title, r'$\alpha$', r'$\delta$', 12)
+ax_skymap_lambda_pvalue = set_style(ax_skymap_lambda_pvalue, title, r'$\alpha$', r'$\delta$', 14)
+ax_skymap_poisson_pvalue = set_style(ax_skymap_poisson_pvalue, title, r'$\alpha$', r'$\delta$', 14)
 
-ax_skymap_poisson_pvalue.set_title(title, y=1.1)
-ax_skymap_lambda_pvalue.set_title(title, y=1.1)
+#define the grip spacing
+dec_grid = np.radians(np.linspace(-60, 60, 5))
+ra_grid = np.radians(np.linspace(-150, 150, 6))
+
+ax_skymap_poisson_pvalue.set_xticks(ra_grid)
+ax_skymap_poisson_pvalue.set_yticks(dec_grid)
+ax_skymap_lambda_pvalue.set_xticks(ra_grid)
+ax_skymap_lambda_pvalue.set_yticks(dec_grid)
+
+ax_skymap_poisson_pvalue.grid(axis='both', which='major', alpha=1)
+ax_skymap_lambda_pvalue.grid(axis='both', which='major', alpha=1)
+
+#set title
+ax_skymap_poisson_pvalue.set_title(title, y=1.1, fontsize=16)
+ax_skymap_lambda_pvalue.set_title(title, y=1.1, fontsize=16)
 
 #plot color bar
 cb_lambda_pvalue = fig_skymap_penalized_pvalues.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=lower_limit_cb, vmax=upper_limit_cb), cmap=color_map), ax= ax_skymap_lambda_pvalue, orientation='horizontal')
-cb_lambda_pvalue.ax.set_xlabel(r'$\log_{10} (p_{\Lambda}^*\mathrm{-value})$', fontsize=12)
+cb_lambda_pvalue.ax.set_xlabel(r'$\log_{10} (p_{\Lambda}^*\mathrm{-value})$', fontsize=14)
+cb_lambda_pvalue.ax.tick_params(labelsize=14)
 
 cb_poisson_pvalue = fig_skymap_penalized_pvalues.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=lower_limit_cb, vmax=upper_limit_cb), cmap=color_map), ax= ax_skymap_poisson_pvalue, orientation='horizontal')
-cb_poisson_pvalue.ax.set_xlabel(r'$\log_{10} (p_{\mathrm{poisson}}^*\mathrm{-value})$', fontsize=12)
+cb_poisson_pvalue.ax.set_xlabel(r'$\log_{10} (p_{\mathrm{poisson}}^*\mathrm{-value})$', fontsize=14)
+cb_poisson_pvalue.ax.tick_params(labelsize=14)
 
 fig_skymap_penalized_pvalues.tight_layout()
 fig_skymap_penalized_pvalues.savefig(os.path.join(output_path, output_name_skymap), dpi=1000)
@@ -147,8 +162,9 @@ fig_pvalue_dist = plt.figure(figsize=(5, 4))
 ax_pvalue_dist = fig_pvalue_dist.add_subplot(111)
 
 #define the binning
-poisson_pvalue_bin_centers, poisson_pvalue_bin_content, poisson_pvalue_bin_error = data_2_binned_errorbar(log_poisson_penalized_pvalue, 10, lower_limit_cb, upper_limit_cb, np.ones(len(ra_target)), False)
-lambda_pvalue_bin_centers, lambda_pvalue_bin_content, lambda_pvalue_bin_error = data_2_binned_errorbar(log_lambda_penalized_pvalue, 10, lower_limit_cb, upper_limit_cb, np.ones(len(ra_target)), False)
+binning = np.linspace(lower_limit_cb, upper_limit_cb, 11)
+poisson_pvalue_bin_centers, poisson_pvalue_bin_content, poisson_pvalue_bin_error = data_2_binned_errorbar(log_poisson_penalized_pvalue, binning, lower_limit_cb, upper_limit_cb, np.ones(len(ra_target)), False)
+lambda_pvalue_bin_centers, lambda_pvalue_bin_content, lambda_pvalue_bin_error = data_2_binned_errorbar(log_lambda_penalized_pvalue, binning, lower_limit_cb, upper_limit_cb, np.ones(len(ra_target)), False)
 
 #plot error bars
 flare_color = { '1' : 'tab:red', '7' : 'tab:orange'}
@@ -158,8 +174,8 @@ ax_pvalue_dist.hist(log_lambda_penalized_pvalue, bins=10, range=[lower_limit_cb,
 ax_pvalue_dist.errorbar(poisson_pvalue_bin_centers, poisson_pvalue_bin_content, yerr=poisson_pvalue_bin_error, color='tab:blue', linestyle='none', marker='o', markersize=5, fillstyle='none', label='Poisson')
 ax_pvalue_dist.errorbar(lambda_pvalue_bin_centers, lambda_pvalue_bin_content, yerr=lambda_pvalue_bin_error, color=flare_color[flare_duration], linestyle='none', marker='o', markersize=3, label=r'$\Lambda$')
 
-ax_pvalue_dist = set_style(ax_pvalue_dist, '', r'$\log_{10} (p^*)$', r'Number of targets', 12)
-ax_pvalue_dist.legend(loc='upper left', title=r'$n_{\mathrm{flares}} = %s$, $n_{\mathrm{events}} = %s$, \vspace{5pt}\par $\Delta T_{\mathrm{flare}} = %s$ days' % (n_flares, n_events, flare_duration), title_fontsize=12, fontsize=12)
+ax_pvalue_dist = set_style(ax_pvalue_dist, '', r'$\log_{10} (p^*)$', r'Number of targets', 16)
+ax_pvalue_dist.legend(loc='upper left', title=r'$n_{\mathrm{flares}} = %s$, $n_{\mathrm{events}} = %s$, \vspace{5pt}\par $\Delta T_{\mathrm{flare}} = %s$ days' % (n_flares, n_events, flare_duration), title_fontsize=16, fontsize=16)
 
 fig_pvalue_dist.tight_layout()
 fig_pvalue_dist.savefig(os.path.join(output_path, output_name_dist), dpi=1000)

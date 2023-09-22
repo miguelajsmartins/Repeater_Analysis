@@ -49,15 +49,15 @@ def get_fit_params_lambda_dist_per_rate(filename):
     #get the lambda distribution
     lambda_data = pd.read_json(filename)
 
-    lambda_data = lambda_data[lambda_data['omega_upper_edges'] > 1]
+    lambda_data = lambda_data[lambda_data['rate_upper_edges'] > 1]
 
     #make sure lists are arrays
     lambda_data['lambda_bin_centers'] = lambda_data['lambda_bin_centers'].apply(lambda x: np.array(x))
     lambda_data['lambda_bin_content'] = lambda_data['lambda_bin_content'].apply(lambda x: np.array(x))
 
     #compute declination bin centers
-    rate_bin_low_edges = lambda_data['omega_low_edges'].to_numpy()
-    rate_bin_upper_edges = lambda_data['omega_upper_edges'].to_numpy()
+    rate_bin_low_edges = lambda_data['rate_low_edges'].to_numpy()
+    rate_bin_upper_edges = lambda_data['rate_upper_edges'].to_numpy()
 
     #compute the error of each bin content
     lambda_data['lambda_bin_error'] = lambda_data['lambda_bin_content'].apply(lambda x: np.sqrt(x))
@@ -138,7 +138,7 @@ if not os.path.exists(output_path):
 #save file containing distribution of lambda as a function of declination
 path_to_files = './datasets/estimator_dist'
 fname_lambda_per_dec = 'Lambda_dist_per_dec_997.json'
-fname_lambda_per_rate = 'Lambda_dist_per_rate_997.json'
+fname_lambda_per_rate = 'Lambda_dist_per_rate_10000.json'
 
 fname_lambda_per_dec = os.path.join(path_to_files, fname_lambda_per_dec)
 fname_lambda_per_rate = os.path.join(path_to_files, fname_lambda_per_rate)
@@ -280,7 +280,7 @@ for i, rate_low_edge in enumerate(rate_bin_low_edges):
 #style of axis to plot lambda distribution
 ax_lambda_dist = set_style(ax_lambda_dist, '', r'$\Lambda$', 'Prob. density', 12)
 ax_lambda_dist.set_yscale('log')
-ax_lambda_dist.set_ylim(5e-7,.5)
+ax_lambda_dist.set_ylim(1e-7,.5)
 
 cb_lambda_dist = fig_lambda_dist.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=min(rate_bin_low_edges), vmax=max(rate_bin_upper_edges)), cmap=color_map), ax=ax_lambda_dist) #, cmap=color_map)
 cb_lambda_dist.ax.set_ylabel(r'$\Gamma \;(\mathrm{decade}^{-1})$', fontsize=12)
