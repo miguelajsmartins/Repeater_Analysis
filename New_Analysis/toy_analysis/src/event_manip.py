@@ -12,7 +12,7 @@ def dec_to_colat(dec):
     return np.pi / 2 - dec
 
 #order events by time
-def time_ordered_events(time, ra, dec, theta, lst):
+def time_ordered_events(time, ra, dec, theta, phi, lst):
 
     #indices of ordered time array
     sorted_indices = time.argsort()
@@ -21,9 +21,11 @@ def time_ordered_events(time, ra, dec, theta, lst):
     ra = ra[sorted_indices]
     dec = dec[sorted_indices]
     theta = theta[sorted_indices]
+    phi = phi[sorted_indices]
     lst = lst[sorted_indices]
 
-    return time, ra, dec, theta, lst
+
+    return time, ra, dec, theta, phi, lst
 
 #time ordering events only taking time, ra and dec
 def time_ordered_events_ra_dec(time, ra, dec):

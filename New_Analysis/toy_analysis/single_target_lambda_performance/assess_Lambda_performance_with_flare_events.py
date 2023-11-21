@@ -354,14 +354,14 @@ if __name__ == '__main__':
 
         #print(events_per_flare_grid[0,:])
         #print(flare_duration_grid[:,0])
-        lower_contours = np.arange(-4.25, np.log10(poisson_pvalue), .25)
-        upper_contours = np.append(np.arange(np.log10(poisson_pvalue), 0, .25), 0)
+        lower_contours = np.arange(-4.25, np.log10(1 - poisson_pvalue), .25)
+        upper_contours = np.linspace(np.log10(1 - poisson_pvalue), 0, 5) #, 0)
         contour_levels = np.concatenate((lower_contours, upper_contours))
 
-        heatmap_lambda_performance = ax_lambda_performance.contourf(flare_duration_grid, events_per_flare_grid, np.log10(np.transpose(postrial_lambda_pvalues)), levels = contour_levels, cmap='RdBu', norm = mcolors.TwoSlopeNorm(vmin = contour_levels[0], vcenter = np.log10(poisson_pvalue), vmax =contour_levels[-1]))
+        heatmap_lambda_performance = ax_lambda_performance.contourf(flare_duration_grid, events_per_flare_grid, np.log10(np.transpose(postrial_lambda_pvalues)), levels = contour_levels, cmap='RdBu', norm = mcolors.TwoSlopeNorm(vmin = contour_levels[0], vcenter = np.log10(1 - poisson_pvalue), vmax =contour_levels[-1]))
 
         #plot the contour corresponding to 0
-        poisson_contour_lambda_performance = ax_lambda_performance.contour(flare_duration_grid, events_per_flare_grid, np.log10(np.transpose(postrial_lambda_pvalues)), levels = [np.log10(poisson_pvalue)], colors = 'black', linestyles = 'dashed', linewidths = 1)
+        poisson_contour_lambda_performance = ax_lambda_performance.contour(flare_duration_grid, events_per_flare_grid, np.log10(np.transpose(postrial_lambda_pvalues)), levels = [np.log10(1 - poisson_pvalue)], colors = 'black', linestyles = 'dashed', linewidths = 1)
 
         #define the style of the axis
         ax_lambda_performance = set_style(ax_lambda_performance, r'$\mu = %.0f$ events, $N_{\mathrm{events}} = %.0f$, $T_{\mathrm{obs}} = 10$ years' % (exp_nEvents, iso_nEvents), r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$', r'$n_{\mathrm{events}}$', 12)
@@ -369,13 +369,13 @@ if __name__ == '__main__':
 
         #create and define style of color bar
         cb_lambda_performance = fig_lambda_performance.colorbar(heatmap_lambda_performance, ax=ax_lambda_performance)
-        cb_lambda_performance = set_cb_style(cb_lambda_performance, r'pos-trial $p_{\Lambda}^*\mathrm{-value}$', [contour_levels[0], 0], 12)
+        cb_lambda_performance = set_cb_style(cb_lambda_performance, r'$\log_{10} \left( 1 - \displaystyle \frac{n_{\Lambda}}{n_{\mathrm{samples}}} \right)$', [contour_levels[0], 0], 12)
 
         labeled_contour_levels = np.linspace(-4, 0, 5)
         cb_lambda_performance.set_ticks(labeled_contour_levels)
         cb_lambda_performance.set_ticklabels(['%.1f' % label for label in labeled_contour_levels], fontsize = 12)
 
-        cb_lambda_performance.ax.hlines(100*poisson_pvalue, 0, 1, color = 'black', linestyle = 'solid')
+        cb_lambda_performance.ax.hlines(np.log10(1 - poisson_pvalue), 0, 1, color = 'black', linestyle = 'solid')
         #ax_lambda_performance.clabel(poisson_contour_lambda_performance, fontsize = 12, fmt='%.0f \%%')
 
         #plot axis with intuitive time scales
