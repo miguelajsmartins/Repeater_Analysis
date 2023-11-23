@@ -14,10 +14,14 @@ def dec_to_colat(dec):
 #order events by time
 def time_ordered_events(time, ra, dec, theta, phi, lst):
 
+    #transform time object into a gpstime
+    gps_time = time.gps
+
     #indices of ordered time array
-    sorted_indices = time.argsort()
+    sorted_indices = gps_time.argsort()
 
     time = time[sorted_indices]
+    gps_time = gps_time[sorted_indices]
     ra = ra[sorted_indices]
     dec = dec[sorted_indices]
     theta = theta[sorted_indices]
@@ -25,7 +29,7 @@ def time_ordered_events(time, ra, dec, theta, phi, lst):
     lst = lst[sorted_indices]
 
 
-    return time, ra, dec, theta, phi, lst
+    return time, gps_time, ra, dec, theta, phi, lst
 
 #time ordering events only taking time, ra and dec
 def time_ordered_events_ra_dec(time, ra, dec):
