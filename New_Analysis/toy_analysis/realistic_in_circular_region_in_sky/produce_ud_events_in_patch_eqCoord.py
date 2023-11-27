@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import math
+import numpy.ma as ma
 
 from random import seed
 from datetime import datetime
@@ -117,32 +117,26 @@ def compute_accepted_events(time, ra, dec, pao_loc, theta_max):
     pao_lat = pao_loc.lat.rad
 
     # compute local sidereal time
-    lst = time.sidereal_time('apparent').rad
+    lst = time.sidereal_time('mean').rad
 
     # compute zenith angle of event and only accept if smaller than theta_max
     theta = ang_diff(dec, lat_pao, ra, lst)
-    accept = theta < theta_max
-
-    time = time[accept]
-    ra = ra[accept]
-    dec = dec[accept]
-    lst = lst[accept]
-    theta = theta[accept]
 
     #compute acceptance probability
     accept_prob = np.cos(theta)
 
-    rand_number = np.random.random(len(time))
+    rand_number = np.random.random(time.shape)
 
-    accepted_indices = rand_number < accept_prob
+    #accept events if they are in FoV and accoring to acceptance function
+    accepted = np.logical_and(theta < theta_max, rand_number < accept_prob)
 
-    #compute the azimuth for the accepted events
-    equatorial_coords = SkyCoord(ra[accepted_indices]*u.rad, dec[accepted_indices]*u.rad, frame='icrs')
-    horizontal_coords = equatorial_coords.transform_to(AltAz(obstime=time[accepted_indices], location=pao_loc))
+    accepted_time = ma.masked_array(time.gps, mask = np.logical_not(accepted)).filled(fill_value = np.nan)
+    accepted_ra = ma.masked_array(ra, mask = np.logical_not(accepted)).filled(fill_value = np.nan)
+    accepted_dec = ma.masked_array(dec, mask = np.logical_not(accepted)).filled(fill_value = np.nan)
+    accepted_lst = ma.masked_array(lst, mask = np.logical_not(accepted)).filled(fill_value = np.nan)
+    accepted_theta = ma.masked_array(theta, mask = np.logical_not(accepted)).filled(fill_value = np.nan)
 
-    azimuth = horizontal_coords.az.rad
-
-    return time[accepted_indices], ra[accepted_indices], dec[accepted_indices], theta[accepted_indices], azimuth, lst[accepted_indices]
+    return accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst
 
 #compute accepted events using directly the generated theta
 def get_equatorial_coordinates(time, theta, phi, pao_loc):
@@ -155,7 +149,7 @@ def get_equatorial_coordinates(time, theta, phi, pao_loc):
     dec = equatorial_coords.dec.rad
 
     #compute sidereal time for each event
-    lst = time.sidereal_time('apparent').rad
+    lst = time.sidereal_time('mean').rad
 
     return ra, dec, lst
 
@@ -217,89 +211,80 @@ n_events_accepted_in_patch = np.ceil((integrated_exposure_in_patch / total_integ
 #multiply the computed number of events by factor that takes into account the rejection of events
 print(n_events_accepted_in_patch)
 
-n_events_in_patch = int(2*n_events_accepted_in_patch)
+n_events_in_patch = int(5*n_events_accepted_in_patch)
 
 #start of program
 start_time = datetime.now()
 
-n_samples = 20
-#for i in range(10):
+n_samples = int(100)
 
 #generate a collection of time stamps
-time = np.random.randint(start_date, end_date, size = (n_events_in_patch, n_samples))
+time = np.random.randint(start_date, end_date, size = (n_samples, n_events_in_patch))
 time = Time(time, format='gps', scale='utc', location=pao_loc)
 
 #generate vectors of uniformly distributed variables
-rand_a = np.random.random((n_events_in_patch, n_samples))
-rand_b = np.random.random((n_events_in_patch, n_samples))
+rand_a = np.random.random((n_samples, n_events_in_patch))
+rand_b = np.random.random((n_samples, n_events_in_patch))
 
 start_time_1 = datetime.now()
 
 print('Generating random numbers took', start_time_1 - start_time)
 
-#given the position of the source compute the limits for theta
-theta_center, phi_center, theta_lower, theta_upper = compute_zenith_limits(patch_radius, time, ra_center, dec_center, pao_loc, theta_min, theta_max)
-
-#compute theta given the provided limits
-theta = compute_theta(rand_a, theta_lower, theta_upper)
+#compute declinations and right ascensions for all events in the sample
+dec = compute_dec(rand_a, dec_max, dec_min)
+ra = compute_ra(rand_b, dec_center, ra_center, patch_radius, dec)
 
 start_time_2 = datetime.now()
 
-print('Computing theta took', start_time_2 - start_time_1)
+print('Computing right ascensions and declinations took', start_time_2 - start_time_1)
 
-#compute phi limits given theta
-phi_min, phi_max = compute_azimuth_limits(patch_radius, theta, theta_center, phi_center)
+#accept events given the instaneous exposure of the observatory
+accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = compute_accepted_events(time, ra, dec, pao_loc, theta_max)
 
-#compute corresponding values of phi
-phi = compute_phi(rand_b, phi_min, phi_max)
+print('Accepting events took ', datetime.now() - start_time_2, ' s')
 
 start_time_3 = datetime.now()
 
-print('Computing phi took', start_time_3 - start_time_2)
-
-#cleans arrays
-theta_not_nan = np.logical_not(np.isnan(theta))
-
-time, theta, phi = time[theta_not_nan], theta[theta_not_nan], phi[theta_not_nan]
-
-ra, dec, lst = get_equatorial_coordinates(time, theta, phi, pao_loc)
-
-start_time_4 = datetime.now()
-
-print('Computing equatorial coordinates took', start_time_4 - start_time_3)
-
-#compute theta and phi for each value of u and v
-#theta = compute_dec(rand_a, dec_min, dec_max)
-#phi = compute_ra(rand_b, dec_center, ra_center, patch_radius, dec)
-
-#accept events and save first few accepted events in file
-
-
-#accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_phi, accepted_lst = compute_accepted_events(time, ra, dec, pao_loc, theta_max)
-
-print('Efficiency in accepting events =', time.shape[0] / n_events_in_patch)
-print('Entire analsyis took ', datetime.now() - start_time, ' s')
-
 #accept only the first n_events_accepted_in_patch events
-# accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_phi, accepted_lst = accepted_time[:n_events_accepted_in_patch], accepted_ra[:n_events_accepted_in_patch], accepted_dec[:n_events_accepted_in_patch], accepted_theta[:n_events_accepted_in_patch], accepted_phi[:n_events_accepted_in_patch], accepted_lst[:n_events_accepted_in_patch]
-#
-# #order events by time
-# accepted_time, accepted_gps_time, accepted_ra, accepted_dec, accepted_theta, accepted_phi, accepted_lst = time_ordered_events(accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_phi, accepted_lst)
-#
-# #compute the azimuth limits for a given theta
-# theta_source = ang_diff(dec_center, lat_pao, ra_center, accepted_lst)
-# phi_source = SkyCoord(accepted_ra*u.rad, accepted_dec*u.rad, frame='icrs').transform_to(AltAz(obstime=accepted_time, location=pao_loc)).az.rad
-# accepted_phi_min, accepted_phi_max = compute_azimuth_limits(patch_radius, accepted_theta, theta_source, phi_source)
-#
-# #save accepted events into a dataframe
-# accepted_event_data = pd.DataFrame(zip(accepted_gps_time, np.degrees(accepted_ra), np.degrees(accepted_dec), np.degrees(accepted_theta), np.degrees(accepted_phi), np.degrees(accepted_lst)), columns=['gps_time', 'ra', 'dec', 'theta', 'phi', 'lst'])
-#
-# print(accepted_event_data)
-#
-# #define the output path
-# output_path = './datasets'
-#
-# if not os.path.exists(output_path):
-#     os.makedirs(output_path)
-#
-# accepted_event_data.to_parquet('./datasets/IsoDist_%i_decCenter_%i_raCenter_%i_patchRadius_%.0f_acceptance_th80_10years.parquet' % (int(n_events_accepted_in_patch), dec_center, ra_center, np.degrees(patch_radius)), index=True)
+#accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = accepted_time[:n_events_accepted_in_patch,:], accepted_ra[:n_events_accepted_in_patch,:], accepted_dec[:n_events_accepted_in_patch,:], accepted_theta[:n_events_accepted_in_patch,:], accepted_lst[:n_events_accepted_in_patch,:]
+
+#order events by time
+accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = time_ordered_events(accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst)
+
+print(accepted_time.shape)
+
+print('Ordering events in time took ', datetime.now() - start_time_3, ' s')
+
+#compute the azimuth limits for a given theta
+#theta_source = ang_diff(dec_center, lat_pao, ra_center, accepted_lst)
+#phi_source = SkyCoord(accepted_ra*u.rad, accepted_dec*u.rad, frame='icrs').transform_to(AltAz(obstime=accepted_time, location=pao_loc)).az.rad
+#accepted_phi_min, accepted_phi_max = compute_azimuth_limits(patch_radius, accepted_theta, theta_source, phi_source)
+
+#define the output path
+output_path = './datasets/isotropic_samples/decCenter_%i' % dec_center
+
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
+
+#save each sample as a dataframe
+for sample in range(n_samples):
+
+    #save accepted events into a dataframe
+    accepted_event_data = pd.DataFrame(zip(accepted_time[sample,:], np.degrees(accepted_ra[sample,:]), np.degrees(accepted_dec[sample,:]), np.degrees(accepted_theta[sample,:]), np.degrees(accepted_lst[sample,:])), columns=['gps_time', 'ra', 'dec', 'theta', 'lst'])
+
+    #filter all nan values
+    accepted_event_data.dropna(inplace = True, ignore_index = True)
+
+    #print(accepted_event_data)
+
+    #choose a sample of events with only n_events_accepted_in_patch
+    #print(n_events_accepted_in_patch)
+    final_accepted_event_data = accepted_event_data.sample(n = n_events_accepted_in_patch, random_state = sample, ignore_index = True)
+
+    #print(final_accepted_event_data)
+    if sample % 10 == 0:
+        print('Produced %i / %i samples!' % (sample, n_samples))
+
+    #accepted_event_data.to_parquet('./datasets/IsoDist_%i_decCenter_%i_raCenter_%i_patchRadius_%.0f_acceptance_th80_10years.parquet' % (int(n_events_accepted_in_patch), dec_center, ra_center, np.degrees(patch_radius)), index=True)
+
+print('Entire analsyis took ', datetime.now() - start_time, ' s')

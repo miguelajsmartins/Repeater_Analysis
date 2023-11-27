@@ -12,7 +12,7 @@ def dec_to_colat(dec):
     return np.pi / 2 - dec
 
 #order events by time
-def time_ordered_events(time, ra, dec, theta, phi, lst):
+def time_ordered_events_with_phi(time, ra, dec, theta, phi, lst):
 
     #transform time object into a gpstime
     gps_time = time.gps
@@ -30,6 +30,21 @@ def time_ordered_events(time, ra, dec, theta, phi, lst):
 
 
     return time, gps_time, ra, dec, theta, phi, lst
+
+#order events by time
+def time_ordered_events(time, ra, dec, theta, lst):
+
+    #indices of ordered time array
+    sorted_indices = np.argsort(time, axis = 1)
+
+    time = np.take_along_axis(time, sorted_indices, axis = 1)
+    ra = np.take_along_axis(ra, sorted_indices, axis = 1)
+    dec = np.take_along_axis(dec, sorted_indices, axis = 1)
+    theta = np.take_along_axis(theta, sorted_indices, axis = 1)
+    lst = np.take_along_axis(lst, sorted_indices, axis = 1)
+
+
+    return time, ra, dec, theta, lst
 
 #time ordering events only taking time, ra and dec
 def time_ordered_events_ra_dec(time, ra, dec):
