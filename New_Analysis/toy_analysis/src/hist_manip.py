@@ -32,7 +32,7 @@ def data_2_binned_errorbar(data, nbins, bin_lower, bin_upper, weights, is_densit
     else:
         bin_error = np.sqrt(bin_content)
 
-    return bin_centers, bin_content, bin_error
+    return np.array(bin_centers), np.array(bin_content), np.array(bin_error)
 
 #plot error bar from 1d numpy array or series
 def data_2_binned_content(data, nbins, bin_lower, bin_upper, weights, is_density):
