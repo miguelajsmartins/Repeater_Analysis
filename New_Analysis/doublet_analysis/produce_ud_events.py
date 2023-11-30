@@ -91,7 +91,8 @@ rand_b = np.random.random((n_samples, n_events))
 dec = compute_dec(rand_a, dec_max)
 ra = compute_ra(rand_b)
 
-time = np.random.randint(start_date, end_date, (n_samples, n_events))
+time = (end_date - start_date)*np.random.random((n_samples, n_events)) + start_date
+
 time = Time(time, format='gps', scale='utc', location=pao_loc)
 
 #accept events and save first few accepted events in file

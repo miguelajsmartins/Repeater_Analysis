@@ -1,13 +1,28 @@
 import numpy as np
 import numpy.ma as ma
 
-array = np.array([1., 2., 3., 4., 5., 6.])
-filter = np.array([3., 5.])
+direction = np.array([1.5, 2.5, 3.5, 4.5, 5.5])
+indices = np.array([1, 2, 1, 1, 3])
 
-tiled_array = np.tile(array, (filter.shape[0], 1))
+sorted_indices = indices.argsort()
 
-below_filter = array < filter[:,np.newaxis]
+indices = indices[sorted_indices]
+direction = direction[sorted_indices]
 
-masked_array = ma.masked_array(tiled_array, mask = np.logical_not(below_filter)).filled(fill_value = np.nan)
+unique_indices, counts = np.unique(indices, return_counts = True)
+slice_positions = np.cumsum(counts)[:-1]
 
-print(masked_array)
+splitted_direction = np.split(direction, slice_positions)
+
+diff_array = np.diff(direction)
+filter = diff_array < 2
+
+event_pairs = np.array(list(zip(direction[:-1][filter], direction[1:][filter], diff_array[filter])))
+
+filter = event_pairs[:,-1] < 2
+
+print(filter.shape)
+print(event_pairs.shape)
+print(direction)
+print(diff_array)
+print(event_pairs)

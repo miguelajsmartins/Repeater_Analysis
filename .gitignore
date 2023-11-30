@@ -3,3 +3,4 @@
 ./New_Analysis/datasets/*
 ./New_Analysis/toy_analysis/single_target_lambda_performance/datasets/*
 ./New_Analysis/toy_analysis/realistic_in_circular_region_in_sky/datasets/*
+./New_Analsysi/doublet_analysis/datasets/*
