@@ -143,7 +143,7 @@ npix = hp.nside2npix(NSIDE)
 
 #defines the target radius
 target_radius = np.radians(1.5)
-target_area = (4*np.pi / npix)
+target_area = 2*np.pi*(1 - np.cos(target_radius))
 
 #define the tau parameter
 tau = 86_164 #in seconds
@@ -175,7 +175,7 @@ output_path = './datasets/iso_doublets'
 start_all = datetime.now()
 
 #compute the number of doublets for each sample
-for input_file in input_filelist[:1]:
+for i, input_file in enumerate(input_filelist):
 
     start = datetime.now()
 
@@ -203,11 +203,11 @@ for input_file in input_filelist[:1]:
     doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']] = np.degrees(doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']])
 
     print(doublet_data)
-    
+
     #save doublet data into a parquet file
-    output_file = os.path.join(output_path, 'Doublets_binnedTargetCenters_' + basename)
+    output_file = os.path.join(output_path, 'Doublets_binnedTargetCenters_targetRadius_%.1fdeg_' % np.degrees(target_radius) + basename)
     doublet_data.to_parquet(output_file, index = True)
 
-    print('Treating 1 event sample took', datetime.now() - start, 's')
+    print('Treating %i / %i event sample took' % (i, len(input_filelist)), datetime.now() - start, 's')
 
 print('Processing %i samples took ' % len(input_filelist), datetime.now() - start_all, 's')

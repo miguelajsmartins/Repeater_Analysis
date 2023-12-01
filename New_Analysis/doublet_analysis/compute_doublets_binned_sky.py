@@ -175,7 +175,7 @@ start = datetime.now()
 for input_file in input_filelist:
 
     #save path to file and its basename
-    basename = os.path.splitext(os.path.basename(input_file))[0]
+    basename = os.path.basename(input_file)
 
     #save dataframe with isotropic events
     event_data = pd.read_parquet(input_file, engine = 'fastparquet')
@@ -200,7 +200,7 @@ for input_file in input_filelist:
     print(doublet_data)
 
     #save doublet data into a parquet file
-    output_file = os.path.join(output_path, 'Doublets_binnedSky_' + basename)
+    output_file = os.path.join(output_path, 'Doublets_binnedSky_nSide_%i_' % (NSIDE) + basename)
     doublet_data.to_parquet(output_file, index = True)
 
 print('This took', datetime.now() - start, 's')
