@@ -94,23 +94,24 @@ def compute_doublets_per_target(event_data, NSIDE, tau):
     time_diff = np.diff(event_time_per_target, axis = 1)
 
     #selects doublets separated by less than tau
-    doublets_less_than_tau = time_diff < tau
+    is_doublet = time_diff < tau
 
-    doublet_times = np.array(list(zip(event_time_per_target[:,:-1][doublets_less_than_tau], event_time_per_target[:,1:][doublets_less_than_tau])))
-    doublet_dec = np.array(list(zip(event_dec_per_target[:,:-1][doublets_less_than_tau], event_dec_per_target[:,1:][doublets_less_than_tau])))
-    doublet_ra = np.array(list(zip(event_ra_per_target[:,:-1][doublets_less_than_tau], event_ra_per_target[:,1:][doublets_less_than_tau])))
+    doublets = np.column_stack([
+        event_time_per_target[:, :-1][is_doublet].ravel(),
+        event_time_per_target[:, 1:][is_doublet].ravel(),
+        event_ra_per_target[:, :-1][is_doublet].ravel(),
+        event_ra_per_target[:, 1:][is_doublet].ravel(),
+        event_dec_per_target[:, :-1][is_doublet].ravel(),
+        event_dec_per_target[:, 1:][is_doublet].ravel()
+    ])
 
     #save the doublets in dataframe
     column_names = ['gps_time_1', 'gps_time_2', 'ra_1', 'ra_2', 'dec_1', 'dec_2']
 
-    doublet_data = pd.DataFrame(zip(doublet_times[:,0], doublet_times[:,1], np.degrees(doublet_ra[:,0]), np.degrees(doublet_ra[:,1]), np.degrees(doublet_dec[:,0]), np.degrees(doublet_dec[:,1])), columns = column_names)
+    doublet_data = pd.DataFrame(doublets, columns = column_names)
 
     return doublet_data
 
-#load events from isotropic distribution
-# if (len(sys.argv) == 1):
-#     print('Must give a file containing distribution of events')
-#     exit()
 
 #define the input path and save files with event samples
 input_path = './datasets/iso_samples'
@@ -123,8 +124,6 @@ for file in os.listdir(input_path):
     if os.path.isfile(filename):
 
         input_filelist.append(filename)
-
-print(input_filelist)
 
 #set position of the pierre auger observatory
 pao_lat = np.radians(-35.15) # this is the average latitude
@@ -167,6 +166,9 @@ integrated_exposure = 2*np.pi*np.trapz(unique_exposure*np.cos(unique_dec_target)
 #compute the normalized exposure map
 exposure_map = compute_directional_exposure(dec_target, theta_max, pao_lat) / integrated_exposure
 
+#define the output path
+output_path = './datasets/iso_doublets'
+
 start = datetime.now()
 
 #compute the number of doublets for each sample
@@ -188,7 +190,18 @@ for input_file in input_filelist:
 
     doublet_data = compute_doublets_per_target(event_data, NSIDE, tau)
 
-    print(doublet_data.head())
+    #clean nan and duplicated events
+    doublet_data.dropna(inplace = True, ignore_index = True)
+    doublet_data.drop_duplicates(inplace = True, ignore_index = True)
+
+    #convert angles to degrees
+    doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']] = np.degrees(doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']])
+
+    print(doublet_data)
+
+    #save doublet data into a parquet file
+    output_file = os.path.join(output_path, 'Doublets_binnedSky_' + basename)
+    doublet_data.to_parquet(output_file, index = True)
 
 print('This took', datetime.now() - start, 's')
 
