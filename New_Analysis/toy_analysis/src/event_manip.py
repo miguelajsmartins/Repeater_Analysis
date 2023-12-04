@@ -3,6 +3,8 @@ import healpy as hp
 
 from astropy.coordinates import EarthLocation
 
+from scipy.special import exp1 as exp_int
+
 #converts colatitude to declination
 def colat_to_dec(colat):
     return np.pi / 2 - colat
@@ -30,6 +32,14 @@ def time_ordered_events_with_phi(time, ra, dec, theta, phi, lst):
 
 
     return time, gps_time, ra, dec, theta, phi, lst
+
+#compute the correction to lambda to ensure that its mean value is close to 0
+def compute_lambda_correction(n_events_in_target, mu_target):
+
+    first_term = np.euler_gamma + exp_int(mu_target) + np.log(mu_target)*np.exp(-mu_target)
+    second_term = 1 - (mu_target*np.log(mu_target) + 1)*np.exp(-mu_target)
+
+    return (n_events_in_target - 1)*(first_term + (second_term / mu_target))
 
 #order events by time
 def time_ordered_events(time, ra, dec, theta, lst):
