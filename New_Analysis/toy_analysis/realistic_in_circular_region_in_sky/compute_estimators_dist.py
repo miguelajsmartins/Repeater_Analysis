@@ -8,7 +8,9 @@ import astropy.units as u
 import os
 import sys
 
-sys.path.append('./src/')
+sys.path.append('../src/')
+
+import matplotlib.pyplot as plt
 
 from event_manip import get_integrated_exposure_between
 from hist_manip import data_2_binned_errorbar
@@ -76,87 +78,101 @@ def get_lambda_dist_per_dec(list_of_files):
     return lambda_dist_df
 
 #maybe consider merging this function with the previous one
-def get_lambda_dist_per_rate(list_of_files):
+def get_lambda_dist_per_rate(filelist):
 
-    bin_contents_list = []
-    bin_error_95 = []
-    lambda_dist_list = []
-    lower_error_band = []
-    upper_error_band = []
+    #since all the files have the same binning, compute the min and max expected number of events
+    mu_per_target = np.unique(pd.read_parquet(filelist[0], engine = 'fastparquet')['mu_in_target'])
+    mu_min = np.floor(np.min(mu_per_target)).astype('int')
+    mu_max = np.ceil(np.max(mu_per_target)).astype('int')
 
-    #define the bins in declination
-    omega_bin_edges = np.linspace(0, 19, 39)
-    omega_bin_centers = hist_manip.get_bin_centers(omega_bin_edges)
-    omega_bin_width = hist_manip.get_bin_width(omega_bin_edges)
+    #define the binning in the number of expected events
+    mu_bins = np.append(np.arange(mu_min, mu_max, .5), mu_max)
 
-    #loop over files
-    for i, file in enumerate(list_of_files):
+    #define the binning in lambda
+    lambda_bins = np.append(np.arange(-15, 170, 1), 170)
+    lambda_corrected_bins = np.append(np.arange(-30, 120, 1), 120)
 
-        data = pd.read_parquet(file, engine='fastparquet')
+    #save the contents of the lambda distributions
+    lambda_content_per_mu_list = []
+    corrected_lambda_content_per_mu_list = []
 
-        omega_data = data['expected_events_in_target'].to_numpy()
-        lambda_values = data['lambda'].to_numpy()
+    for file in filelist:
 
-        lambda_values = [lambda_values[np.where( (omega_data > omega_bin_edges[j -1 ]) & (omega_data < omega_bin_edges[j]))[0]] for j in range(1, len(omega_bin_edges))]
+        #save relevant columns of dataframe
+        data = pd.read_parquet(file, engine = 'fastparquet')
 
-        #lambda_values = np.array(lambda_values)
+        #save the relevant columns from the dataframe
+        mu_per_target = data['mu_in_target'].to_numpy()
+        lambda_per_target = data['lambda'].to_numpy()
+        lambda_corrected_per_target = data['lambda_corrected'].to_numpy()
 
-        lambda_dist_list.append(lambda_values)
+        #sort arrays according to mu
+        sorted_indices = mu_per_target.argsort()
+        mu_per_target, lambda_per_target, lambda_corrected_per_target = mu_per_target[sorted_indices], lambda_per_target[sorted_indices], lambda_corrected_per_target[sorted_indices]
 
-    #transform list into array
-    lambda_values_array = np.array(lambda_dist_list, dtype=list)
+        #split arrays of estimators according to expected number of events in target
+        split_indices = np.searchsorted(mu_per_target, mu_bins)[1:-1]
+        lambda_per_mu = np.split(lambda_per_target, split_indices)
+        corrected_lambda_per_mu = np.split(lambda_corrected_per_target, split_indices)
 
-    #transpose
-    lambda_dist_per_omega_bin = np.transpose(lambda_values_array)
+        #compute the bin contents of the lambda distribution
+        lambda_bin_content_per_mu = np.array([np.histogram(array, bins = lambda_bins)[0] for array in lambda_per_mu])
+        lambda_corrected_bin_content_per_mu = np.array([np.histogram(array, bins = lambda_corrected_bins)[0] for array in corrected_lambda_per_mu])
 
-    #print(lambda_dist_per_omega_bin.shape)
-    total_lambda_dist_per_omega_bin = np.array([np.concatenate(lambda_dist).ravel() for lambda_dist in lambda_dist_per_omega_bin], dtype=object)
+        #save lambda bin contents
+        lambda_content_per_mu_list.append(lambda_bin_content_per_mu)
+        corrected_lambda_content_per_mu_list.append(lambda_corrected_bin_content_per_mu)
 
-    #print(total_lambda_dist_per_omega_bin[0])
+    #compute average lambda distribution
+    lambda_content_per_mu_list = np.array(lambda_content_per_mu_list)
+    corrected_lambda_content_per_mu_list = np.array(corrected_lambda_content_per_mu_list)
 
-    #create limits for lambda dist
-    lambda_dist_edges = np.linspace(-10, 70, 200)
-    lambda_bin_centers = hist_manip.get_bin_centers(lambda_dist_edges)
+    lambda_content_per_mu = np.mean(lambda_content_per_mu_list, axis = 0)
+    corrected_lambda_content_per_mu = np.mean(corrected_lambda_content_per_mu_list, axis = 0)
 
-    #compute the .9 quantile of the Lambda distribution
-    quantile_99 = [np.nanquantile(lambda_dist, .99) if len(lambda_dist) > 0 else np.nan for lambda_dist in total_lambda_dist_per_omega_bin]
-    lambda_bin_content_array = np.array([data_2_binned_content(lambda_dist, lambda_dist_edges, lambda_dist_edges[0], lambda_dist_edges[-1], np.ones(len(lambda_dist)), False) for lambda_dist in total_lambda_dist_per_omega_bin ])
-    lambda_bin_centers = np.array([lambda_bin_centers for i in range(len(omega_bin_centers))])
+    #build dataframes with lambda distributions
+    lambda_dist_data = pd.DataFrame(zip(mu_bins[:-1], mu_bins[1:], np.tile(lambda_bins, (len(mu_bins[1:]), 1)), lambda_content_per_mu), columns=['mu_low_edges', 'mu_upper_edges', 'lambda_bin_edges', 'lambda_bin_content'])
 
-    #build dataframe with lambda_dist
-    lambda_dist_df = pd.DataFrame(zip(omega_bin_edges[:-1], omega_bin_edges[1:], lambda_bin_centers, lambda_bin_content_array, quantile_99), columns=['omega_low_edges', 'omega_upper_edges', 'lambda_bin_centers', 'lambda_bin_content', 'lambda_dist_quantile_99'])
+    plt.plot(lambda_corrected_bins[1:], corrected_lambda_content_per_mu[-2])
+    plt.plot(lambda_bins[1:], lambda_content_per_mu[-2])
+    plt.yscale('log')
+    plt.show()
 
-    return lambda_dist_df
+    print(lambda_dist_data)
 
-#save names of files containing events
-path_to_files = './datasets/estimators/'
-file_list = []
+    #return lambda_dist_df
 
-# Loop over files in the directory
-for filename in os.listdir(path_to_files):
+#define the main function
+if __name__ == '__main__':
 
-    f = os.path.join(path_to_files, filename)
+    #define important quantities
+    dec_center = np.radians(-30)
+    ra_center = np.radians(0)
+    patch_radius = np.radians(25)
+    target_radius = np.radians(1.5)
 
-    if os.path.isfile(f) and 'Estimator' in f: # and 'Scrambled' not in f:
+    input_path = './datasets/iso_estimators/decCenter_%.0f' % np.degrees(dec_center)
 
-        file_list.append(f)
+    filelist = []
 
-#set position of the pierre auger observatory
-lat_pao = np.radians(-35.15) # this is the average latitude
-long_pao = np.radians(-69.2) # this is the averaga longitude
-height_pao = 1425*u.meter # this is the average altitude
+    # loop over files in the directory
+    for file in os.listdir(input_path):
 
-#define the earth location corresponding to pierre auger observatory
-pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
+        filename = os.path.join(input_path, file)
 
-lambda_dist_per_dec = get_lambda_dist_per_dec(file_list)
-lambda_dist_per_rate = get_lambda_dist_per_rate(file_list)
+        if os.path.isfile(filename) and 'Estimators' in filename: # and 'Scrambled' not in f:
 
-print(lambda_dist_per_dec.head(20))
-print(lambda_dist_per_rate.head(20))
+            filelist.append(filename)
 
-lambda_dist_per_dec.to_json('./datasets/estimator_dist/Lambda_dist_per_dec_%i.json' % len(file_list), index = True)
-lambda_dist_per_rate.to_json('./datasets/estimator_dist/Lambda_dist_per_rate_%i.json' % len(file_list), index = True)
+
+    #lambda_dist_per_dec = get_lambda_dist_per_dec(file_list)
+    get_lambda_dist_per_rate(filelist)
+
+    #print(lambda_dist_per_dec.head(20))
+    #print(lambda_dist_per_rate.head(20))
+
+    #lambda_dist_per_dec.to_json('./datasets/estimator_dist/Lambda_dist_per_dec_%i.json' % len(file_list), index = True)
+    #lambda_dist_per_rate.to_json('./datasets/estimator_dist/Lambda_dist_per_rate_%i.json' % len(file_list), index = True)
 
 # #save the pdf of the directional exposure for each bin in sin(dec)
 # low_lims = [-90, -40, 0]
