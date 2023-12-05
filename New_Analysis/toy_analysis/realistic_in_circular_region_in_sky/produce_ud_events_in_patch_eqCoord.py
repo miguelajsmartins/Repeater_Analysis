@@ -33,24 +33,44 @@ def compute_theta(u, theta_min, theta_max):
 
     return .5*np.arccos(np.cos(2*theta_min) - u * (np.cos(2*theta_min) - np.cos(2*theta_max)) )
 
-def compute_phi(u, phi_min, phi_max):
-
-    return (phi_max - phi_min)*u + phi_min
+# def compute_phi(u):
+#
+#     return 2*pi*u
 
 #compute declination for u uniform in [0, 1]
-def compute_dec(u, dec_max, dec_min):
+def compute_dec(u):
 
-    return np.arcsin(u*(np.sin(dec_max) - np.sin(dec_min)) + np.sin(dec_min))
+    return np.arcsin(2*u - 1)
 
 #compute right ascension for u uniform in [0, 1]
 def compute_ra(u, dec_center, ra_center, psi_patch, dec):
 
+    #initialize ra array
+    ra = 2*np.pi*u
+
+    #filter out events such that declination is below limits
+    dec_bottom = dec_center - psi_patch
+    dec_top = dec_center + psi_patch
+
+    in_dec_band = np.logical_and(dec < dec_top, dec > dec_bottom)
+
+    ra = ma.masked_array(ra, mask = np.logical_not(in_dec_band)).filled(fill_value = np.nan)
+    dec = ma.masked_array(dec, mask = np.logical_not(in_dec_band)).filled(fill_value = np.nan)
+
     #compute the maximum and minimum right ascensions
     delta_ra = np.arccos( (np.cos(psi_patch) - np.sin(dec_center)*np.sin(dec)) / (np.cos(dec)*np.cos(dec_center)) )
-    ra_min = ra_center - delta_ra
-    ra_max = ra_center + delta_ra
+    ra_right = ra_center + delta_ra
+    ra_left = 2*np.pi + ra_center - delta_ra
 
-    return (ra_max - ra_min)*u + ra_min
+    #print(ra_right)
+    #print()
+    #define as nan the values of ra outside of path
+    in_patch = np.logical_or(ra > ra_left, ra < ra_right)
+
+    ra = ma.masked_array(ra, mask = np.logical_not(in_patch)).filled(fill_value = np.nan)
+    dec = ma.masked_array(dec, mask = np.logical_not(in_patch)).filled(fill_value = np.nan)
+
+    return ra, dec
 
 #compute right ascention limits for a given declination and a circular patch
 def get_max_ra_width(dec, dec_min, dec_max, dec_center, patch_radius):
@@ -191,20 +211,24 @@ n_events = 100_000
 #define the maximum accepted zenith angle
 theta_min = np.radians(0)
 theta_max = np.radians(80)
-all_dec_max = lat_pao + theta_max
+dec_max = lat_pao + theta_max
 
-dec_min = dec_center - patch_radius
-dec_max = dec_center + patch_radius
+#define the maximum and minimum declinations in the patch and the corresponding max and min uniformly distributed random numbers
+dec_bottom = dec_center - patch_radius
+dec_top = dec_center + patch_radius
 
-if dec_max > all_dec_max:
+rand_dec_max = .5*(1 + np.sin(dec_top))
+rand_dec_min = .5*(1 + np.sin(dec_bottom))
+
+if dec_top > dec_max:
     print('please make sure all events in patch are in FoV of observatory!')
     exit()
 
 #compute the integrated exposure over the circular area to determine the number of expected events in the cap
-dec_in_patch = np.linspace(dec_min, dec_max, 1000)
-ra_width_in_patch = get_max_ra_width(dec_in_patch, dec_min, dec_max, dec_center, patch_radius)
+dec_in_patch = np.linspace(dec_bottom, dec_top, 1000)
+ra_width_in_patch = get_max_ra_width(dec_in_patch, dec_bottom, dec_top, dec_center, patch_radius)
 
-dec_range = np.linspace(-np.pi / 2, all_dec_max, 1000)
+dec_range = np.linspace(-np.pi / 2, dec_max, 1000)
 
 exposure_in_patch = compute_directional_exposure(dec_in_patch, theta_max, lat_pao)
 total_exposure = compute_directional_exposure(dec_range, theta_max, lat_pao)
@@ -219,6 +243,7 @@ print('Number of events to accept in patch %i' % n_events_accepted_in_patch)
 
 #defines the number of isotropically distributed events before accepting them
 n_events_in_patch = int(5*n_events_accepted_in_patch)
+n_events_in_vertical_strip = int(20*( 2*patch_radius / np.pi )*n_events)
 
 #defines the number of iterations and sets up a counter
 n_iter = 10
@@ -233,20 +258,23 @@ for i in range(n_iter):
     n_samples = int(10)
 
     #generate a collection of time stamps
-    time = np.random.randint(start_date, end_date, size = (n_samples, n_events_in_patch))
+    time = np.random.randint(start_date, end_date, size = (n_samples, n_events_in_vertical_strip))
     time = Time(time, format='gps', scale='utc', location=pao_loc)
 
     #generate vectors of uniformly distributed variables
-    rand_a = np.random.random((n_samples, n_events_in_patch))
-    rand_b = np.random.random((n_samples, n_events_in_patch))
+    rand_dec = np.random.random((n_samples, n_events_in_vertical_strip))
+    rand_ra = np.random.random((n_samples, n_events_in_vertical_strip))
 
     start_time_1 = datetime.now()
 
     print('Generating random numbers took', start_time_1 - start_time)
 
-    #compute declinations and right ascensions for all events in the sample
-    dec = compute_dec(rand_a, dec_max, dec_min)
-    ra = compute_ra(rand_b, dec_center, ra_center, patch_radius, dec)
+    #compute declinations and right ascensions for all events in the sample, within the patch
+    dec = compute_dec(rand_dec)
+    ra, dec = compute_ra(rand_ra, dec_center, ra_center, patch_radius, dec)
+
+    #print(dec)
+    #print(ra)
 
     start_time_2 = datetime.now()
 
@@ -273,8 +301,11 @@ for i in range(n_iter):
         #filter all nan values
         accepted_event_data.dropna(inplace = True, ignore_index = True)
 
+        print(len(accepted_event_data.index))
+
         #choose a sample of events with only n_events_accepted_in_patch
         final_accepted_event_data = accepted_event_data.sample(n = n_events_accepted_in_patch, random_state = sample, ignore_index = True)
+        final_accepted_event_data.sort_values(by='gps_time', inplace = True, ignore_index = True)
 
         if counter % 10 == 0:
             print(final_accepted_event_data)

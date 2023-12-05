@@ -268,20 +268,13 @@ for i, input_file in enumerate(input_filelist):
 
     #define the name of the output file
     basename = '_'.join(np.array(os.path.basename(input_file).split('_'))[[0, 2, 3, 4, 5, 6, 7, -2, -1]])
-    output_file = 'Estimators_' + basename[:-17] + 'targetRadius_%.01f_' % np.degrees(target_radius) + basename[-17:]
+    output_file = 'Estimators_targetRadius_%.01f_' % np.degrees(target_radius) + basename
 
     #save dataframe with isotropic events
     event_data = pd.read_parquet(input_file, engine = 'fastparquet')
 
     #compute the expected number of events in each target
     estimator_data = compute_estimators_per_target(event_data, ra_target, dec_target, target_radius, exposure_map, obs_time, n_events)
-
-    #clean nan and duplicated events
-    #estimator_data.dropna(inplace = True, ignore_index = True)
-    #double_data.drop_duplicates(inplace = True, ignore_index = True)
-
-    #convert angles to degrees
-    #doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']] = np.degrees(doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']])
 
     print(estimator_data.describe())
 
