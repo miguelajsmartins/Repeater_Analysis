@@ -1,9 +1,20 @@
 import numpy as np
+import numpy.ma as ma
+
 import healpy as hp
 
 from astropy.coordinates import EarthLocation
 
 from scipy.special import exp1 as exp_int
+
+#get the principal argument for a given angle
+def get_principal_ra(x):
+
+    principal_argument = np.angle(np.exp(1j*x))
+
+    is_positive = principal_argument >= 0
+
+    return ma.masked_array(principal_argument, mask = np.logical_not(is_positive)).filled(fill_value = 2*np.pi + principal_argument)
 
 #converts colatitude to declination
 def colat_to_dec(colat):

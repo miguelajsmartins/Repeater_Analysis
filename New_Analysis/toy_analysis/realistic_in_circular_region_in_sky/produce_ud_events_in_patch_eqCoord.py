@@ -99,7 +99,7 @@ def compute_accepted_events(time, ra, dec, pao_loc, theta_max):
     lst = time.sidereal_time('mean').rad
 
     # compute zenith angle of event and only accept if smaller than theta_max
-    theta = ang_diff(dec, lat_pao, ra, lst)
+    theta = ang_diff(dec, pao_lat, ra, lst)
 
     #compute acceptance probability
     accept_prob = np.cos(theta)
