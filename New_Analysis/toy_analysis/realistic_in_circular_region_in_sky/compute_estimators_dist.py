@@ -63,8 +63,8 @@ def get_lambda_dist_per_rate(filelist):
     lambda_content_per_mu_list = np.array(lambda_content_per_mu_list)
     corrected_lambda_content_per_mu_list = np.array(corrected_lambda_content_per_mu_list)
 
-    lambda_content_per_mu = np.mean(lambda_content_per_mu_list, axis = 0)
-    corrected_lambda_content_per_mu = np.mean(corrected_lambda_content_per_mu_list, axis = 0)
+    lambda_content_per_mu = np.sum(lambda_content_per_mu_list, axis = 0)
+    corrected_lambda_content_per_mu = np.sum(corrected_lambda_content_per_mu_list, axis = 0)
 
     #build dataframes with lambda distributions
     column_names = ['mu_low_edges', 'mu_upper_edges', 'lambda_bin_edges', 'lambda_bin_content']

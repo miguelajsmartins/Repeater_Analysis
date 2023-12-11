@@ -9,15 +9,19 @@ import matplotlib.colors as mcolors
 
 import astropy.units as u
 from astropy.coordinates import EarthLocation
+
+import pickle
 import os
 import sys
 
 import scipy.interpolate as spline
+from scipy.special import gamma
 
 sys.path.append('../src/')
 
 import hist_manip
-import fit_routines
+from fit_routines import perform_fit_exp
+from xmax_fit_routines import perform_fit_gumble
 
 from hist_manip import data_2_binned_errorbar
 from hist_manip import get_bin_centers
@@ -36,101 +40,75 @@ plt.rcParams.update({
     'font.family' : 'serif'
 })
 
-#rounds the declination to multiples of 2 (the bin width)
-def round_declination(dec):
+#compute the cdf of the lambda distribution for each bin, and include the fit parameters
+def get_lambda_cdf(lambda_dist, fitted_lambda_dist):
 
-    return dec - (dec % 2)
+    #save bin centers and bin contents
+    bin_edges = lambda_dist[0]
+    bin_content = lambda_dist[1]
 
-#rounds the rate to multiples of .5
-def round_rate(rate):
+    #compute the cdf
+    cdf_bin_content = np.cumsum(bin_content) / np.sum(lambda_bin_content)
 
-    return rate - (rate % .5)
+    #save the relevant fit parameters
+    tail_slope = fitted_lambda_dist[0][1]
+    fit_init = fitted_lambda_dist[2][0]
 
-#fit the tail of the distribution of lambda
-def get_fit_params_lambda_dist_per_rate(filename):
+    return bin_edges, cdf_bin_content, fit_init, tail_slope
 
-    #get the lambda distribution
-    lambda_data = pd.read_json(filename)
 
-    lambda_data = lambda_data[lambda_data['rate_upper_edges'] > 1]
+#get the distribution of lambda for a given value of expected number of events
+def get_lambda_dist_per_mu(index, lambda_dist_per_mu):
 
-    #make sure lists are arrays
-    lambda_data['lambda_bin_centers'] = lambda_data['lambda_bin_centers'].apply(lambda x: np.array(x))
-    lambda_data['lambda_bin_content'] = lambda_data['lambda_bin_content'].apply(lambda x: np.array(x))
+    #save correspoding value of mu
+    mu_low_edge = lambda_dist_per_mu['mu_low_edges'].loc[index]
+    mu_upper_edge = lambda_dist_per_mu['mu_upper_edges'].loc[index]
 
-    #compute declination bin centers
-    rate_bin_low_edges = lambda_data['rate_low_edges'].to_numpy()
-    rate_bin_upper_edges = lambda_data['rate_upper_edges'].to_numpy()
+    #save the bins edges of the lambda distribution
+    lambda_bin_edges = np.array(lambda_dist_per_mu['lambda_bin_edges'].loc[index])
+    lambda_bin_content = np.array(lambda_dist_per_mu['lambda_bin_content'].loc[index])
 
-    #compute the error of each bin content
-    lambda_data['lambda_bin_error'] = lambda_data['lambda_bin_content'].apply(lambda x: np.sqrt(x))
+    #compute bin centers
+    lambda_bin_centers = get_bin_centers(lambda_bin_edges)
 
-    #fit the lambda distribution as a function of declination
-    lambda_data['tail_fit_params'] = lambda_data.apply(lambda x: fit_routines.perform_fit_exp(x['lambda_bin_centers'], x['lambda_bin_content'], x['lambda_bin_error'], x['lambda_dist_quantile_99']), axis=1)
+    #compute bin errors
+    lambda_bin_error = np.sqrt(lambda_bin_content)
 
-    #save the comulative and normalized lambda CDF, along with fit initial point and beta_Lambda
-    lambda_data['lambda_tail_fit_initial_point'] = lambda_data['tail_fit_params'].apply(lambda x: x[2][0])
-    lambda_data['lambda_tail_fit_slope'] = lambda_data['tail_fit_params'].apply(lambda x: [x[0][1], x[1][1]])
-    lambda_data['lambda_tail_fit_norm'] = lambda_data['tail_fit_params'].apply(lambda x: [x[0][0], x[1][0]])
-    lambda_data['lambda_tail_fit_chi2'] = lambda_data['tail_fit_params'].apply(lambda x: x[4])
+    #normalize distribution
+    integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
 
-    #delete unnecessary columns
-    lambda_data = lambda_data.drop('tail_fit_params', axis = 1)
+    lambda_bin_content = lambda_bin_content / integral
+    lambda_bin_error = lambda_bin_error / integral
 
-    #update bin content
-    lambda_data['above_fit_initial_point'] = lambda_data.apply(lambda x: x['lambda_bin_centers'] > x['lambda_tail_fit_initial_point'], axis = 1)
-    lambda_data['updated_lambda_bin_content'] = lambda_data.apply(lambda x: np.where(x['above_fit_initial_point'], x['lambda_tail_fit_norm'][0]*np.exp(- x['lambda_tail_fit_slope'][0]*x['lambda_bin_centers']), x['lambda_bin_content']), axis = 1)
-    lambda_data['cdf_lambda_bin_content'] = lambda_data['updated_lambda_bin_content'].apply(lambda x: np.cumsum(x) / np.sum(x))
+    return mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error
 
-    lambda_data = lambda_data.drop('above_fit_initial_point', axis = 1)
+#define a function to define the style of a color bar
+def create_colorbar(fig, ax, colormap, title, limits, label_size):
 
-    #save distributions and fit parameters
-    lambda_bin_centers = lambda_data['lambda_bin_centers'].to_numpy()
-    lambda_bin_content = lambda_data['lambda_bin_content'].to_numpy()
-    lambda_bin_error = lambda_data['lambda_bin_error'].to_numpy()
-    lambda_cdf_bin_content = lambda_data['cdf_lambda_bin_content'].to_numpy()
+    cb = fig.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=limits[0], vmax=limits[1]), cmap = colormap), ax = ax)
 
-    lambda_tail_fit_initial_point = lambda_data['lambda_tail_fit_initial_point'].to_numpy()
-    lambda_tail_fit_slope = lambda_data['lambda_tail_fit_slope'].to_numpy()
-    lambda_tail_fit_norm = lambda_data['lambda_tail_fit_norm'].to_numpy()
-    #lambda_tail_fit_shift = lambda_data['lambda_tail_fit_shift'].to_numpy()
-    lambda_tail_fit_chi2 = lambda_data['lambda_tail_fit_chi2'].to_numpy()
+    cb.ax.set_ylabel(title, fontsize=label_size)
+    cb.ax.set_ylim(limits[0], limits[1])
+    cb.ax.tick_params(labelsize=label_size)
 
-    #save fitted Lambda distribution in original file
-    lambda_data.to_json(filename)
+#get extremely fine
+def get_total_kde(input_path, file_kde_lambda_dist, file_kde_corrected_lambda_dist):
 
-    return rate_bin_low_edges, rate_bin_upper_edges, [lambda_bin_centers, lambda_bin_content, lambda_bin_error, lambda_cdf_bin_content], [lambda_tail_fit_initial_point, np.array(lambda_tail_fit_norm, dtype=object), np.array(lambda_tail_fit_slope, dtype=object), lambda_tail_fit_chi2]
+    kde_lambda_dist = []
+    kde_corrected_dist = []
 
-#get the axis with the declination values corresponding to ticks of declination
-def get_exposure_dec_axis(ax_dec, ax_exposure, nticks, theta_max, pao_lat):
+    for file in os.listdir(input_path):
 
-    #define the axis with nticks equally spaced values of declination
-    dec_max = np.degrees(theta_max + pao_lat)
+        filename = os.path.join(input_path, file)
 
-    dec_max = dec_max + (dec_max % 5)
+        if os.path.isfile(filename) and file_kde_lambda_dist in filename:
 
-    dec_ticks = np.linspace(-90, dec_max, nticks)
+            with open(filename, 'rb') as f:
+                kde_lambda_dist.append(pickle.load(f)[:,-1])
 
-    #compute the corresponding directional exposure
-    dir_exposure_ticks = compute_directional_exposure(np.radians(dec_ticks), theta_max, pao_lat)
+    kde_lambda_dist = lambda x: sum(kde(x) for kde in kde_lambda_dist[:,])
 
-    #normalize exposure
-    dec_array = np.radians(np.linspace(-90, 90, 1000))
-    dir_exposure = compute_directional_exposure(dec_array, theta_max, pao_lat)
-    integrated_exposure = np.trapz(dir_exposure*np.cos(dec_array), x=dec_array)
-
-    dir_exposure_ticks = dir_exposure_ticks / integrated_exposure
-
-    #set ticks and tick labels
-    ax_dec.set_xticks(dec_ticks)
-    ax_dec.set_xticklabels(['%.0f' % dec for dec in dec_ticks])
-    #ax_dec.margins(x=.05, y=.05)
-    ax_exposure.set_xticks(dir_exposure_ticks)
-    ax_exposure.set_xticklabels(['%.1f' % dir_exposure for dir_exposure in dir_exposure_ticks])
-    ax_exposure.invert_xaxis()
-    #ax_exposure.margins(x=0, y=0)
-
-    return ax_dec, ax_exposure
+    print(kde_lambda_dist)
 
 #define the main function
 if __name__ == '__main__':
@@ -147,8 +125,8 @@ if __name__ == '__main__':
     patch_radius = np.radians(25)
     target_radius = np.radians(1.5)
 
-    file_lambda_dist = 'Lambda_dist_patchRadius_%.0f_targetRadius_%.1f.json' % (np.degrees(patch_radius), np.degrees(target_radius))
-    file_corrected_lambda_dist = 'Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_lambda_dist = 'Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_10000.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_corrected_lambda_dist = 'Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_10000.json' % (np.degrees(patch_radius), np.degrees(target_radius))
 
     file_lambda_dist = os.path.join(input_path, file_lambda_dist)
     file_corrected_lambda_dist = os.path.join(input_path, file_corrected_lambda_dist)
@@ -158,11 +136,23 @@ if __name__ == '__main__':
         print('One of the requested files does not exist!')
         exit()
 
+    #load files with the kernel density estimation of Lambda using a subsample of data
+    file_kde_lambda_dist = 'GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_kde_corrected_lambda_dist = 'GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f' % (np.degrees(patch_radius), np.degrees(target_radius))
+
+    #get_total_kde(input_path, file_kde_lambda_dist, file_kde_lambda_dist)
+
+    # with open(os.path.join(input_path, file_kde_lambda_dist), 'rb') as file:
+    #     kde_lambda_dist = pickle.load(file)
+    #
+    # with open(os.path.join(input_path, file_kde_corrected_lambda_dist), 'rb') as file:
+    #     kde_corrected_lambda_dist = pickle.load(file)
+
+    #print(kde_lambda_dist.shape)
+
     #save the corresponding dataframes
     lambda_dist_per_mu = pd.read_json(file_lambda_dist)
     corrected_lambda_dist_per_mu = pd.read_json(file_corrected_lambda_dist)
-
-    print(lambda_dist_per_mu)
 
     #set position of the pierre auger observatory
     lat_pao = np.radians(-35.15) # this is the average latitude
@@ -176,168 +166,180 @@ if __name__ == '__main__':
     theta_max = np.radians(80)
 
     # ------------------------------------------
-    # Plot the distribution of Lambda and corrected Lambda for each mu value
+    # Plot the distribution of Lambda and corrected Lambda for each mu value. Fits the distribution as well
     # ------------------------------------------
-    #initialize figure
-    fig_lambda_dist = plt.figure(figsize = (15, 4))
+    quantile = 0.95
 
-    ax_lambda_dist = plt.subplot2grid((2, 3), (0, 0), colspan=1, rowspan=2, fig = fig_lambda_dist)
-    ax_corrected_lambda_dist = plt.subplot2grid((2, 3), (0, 1), colspan=1, rowspan=2, fig = fig_lambda_dist)
-    ax_beta_mu_func = plt.subplot2grid((2, 3), (0, 2), colspan=1, rowspan=1, fig = fig_lambda_dist)
-    ax_mean_mu_func = plt.subplot2grid((2, 3), (1, 2), colspan=1, rowspan=1, fig = fig_lambda_dist)
+    #initialize figure
+    fig_lambda_dist = plt.figure(figsize = (15, 5))
+
+    fig_lambda_dist.suptitle(r'$n_{\mathrm{samples}} = 10^4$, $\psi_{\mathrm{target}} = %.1f^\circ$' % np.degrees(target_radius), fontsize = 14)
+
+    ax_lambda_dist = plt.subplot2grid((3, 3), (0, 0), colspan=1, rowspan=2, fig = fig_lambda_dist)
+    ax_corrected_lambda_dist = plt.subplot2grid((3, 3), (0, 1), colspan=1, rowspan=2, fig = fig_lambda_dist)
+    ax_kde_lambda_dist = plt.subplot2grid((3, 3), (2, 0), colspan=1, rowspan=1, fig = fig_lambda_dist)
+    ax_kde_corrected_lambda_dist = plt.subplot2grid((3, 3), (2, 1), colspan=1, rowspan=1, fig = fig_lambda_dist)
+    ax_beta_mu_func = plt.subplot2grid((3, 3), (0, 2), colspan=1, rowspan=1, fig = fig_lambda_dist)
+    ax_mean_mu_func = plt.subplot2grid((3, 3), (1, 2), colspan=1, rowspan=2, fig = fig_lambda_dist)
 
     #get the colormap
-    colormap = plt.get_cmap('RdBu')
+    colormap = plt.get_cmap('magma')
 
     #produce the color array
+    mu_array = np.array(lambda_dist_per_mu['mu_low_edges'].values)
     color_array = (lambda_dist_per_mu['mu_low_edges'].values - lambda_dist_per_mu['mu_low_edges'].min()) / (lambda_dist_per_mu['mu_low_edges'].max() - lambda_dist_per_mu['mu_low_edges'].min())
     color_array = colormap(color_array)
+
+    #save moments of distributions
+    mean_lambda = []
+    sigma_lambda = []
+    mean_corrected_lambda = []
+    sigma_corrected_lambda = []
+
+    beta_lambda = []
+    beta_lambda_error = []
+    beta_corrected_lambda = []
+    beta_corrected_lambda_error = []
+
+    #list to save the cdf of the lambda distribution
+    cdf_lambda_dist = []
+    cdf_corrected_lambda_dist = []
 
     #plot the distribution of lambda per expected value of events
     for i in range(len(lambda_dist_per_mu)):
 
-        #save correspoding value of mu
-        mu_low_edge = lambda_dist_per_mu['mu_low_edges'].loc[i]
+        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, lambda_dist_per_mu)
 
-        #save the bins edges of the lambda distribution
-        lambda_bin_edges = np.array(lambda_dist_per_mu['lambda_bin_edges'].loc[i])
-        lambda_bin_content = np.array(lambda_dist_per_mu['lambda_bin_content'].loc[i])
+        #define the initial point of the fit and fit the lambda distribution
+        cdf_lambda = np.cumsum(lambda_bin_content)
+        fit_initial =  lambda_bin_centers[cdf_lambda > quantile][0]
 
-        #compute bin centers
-        lambda_bin_centers = get_bin_centers(lambda_bin_edges)
+        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial)
 
-        #compute bin errors
-        lambda_bin_error = np.sqrt(lambda_bin_content)
+        #fill arrays
+        mean = np.sum(lambda_bin_centers*lambda_bin_content) / np.sum(lambda_bin_content)
+        second_moment = np.sum((lambda_bin_centers**2)*lambda_bin_content) / np.sum(lambda_bin_content)
+        sigma = np.sqrt(second_moment - mean**2)
 
-        #normalize distribution
-        integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
+        mean_lambda.append(mean)
+        sigma_lambda.append(sigma)
+        beta_lambda.append(fitted_lambda_dist[0][1])
+        beta_lambda_error.append(fitted_lambda_dist[1][1])
 
-        lambda_bin_content = lambda_bin_content / integral
-        lambda_bin_error = lambda_bin_error / integral
+        #save the fitted cdf of the lambda distribution
+        cdf_bin_centers, cdf_bin_content, fit_init, tail_slope = get_lambda_cdf([lambda_bin_centers, lambda_bin_content], fitted_lambda_dist)
+
+        cdf_lambda_dist.append([mu_low_edge, mu_upper_edge, cdf_bin_centers, cdf_bin_content, fit_init, tail_slope])
 
         #plot distribution for some cases
-        #if mu_low_edge in [20, 22, 24]:
-        ax_lambda_dist.plot(lambda_bin_centers, lambda_bin_content, color = color_array[i], marker = 'o', markersize = 5, mfc = 'white')
+        if mu_low_edge in [20, 22, 24, 28, 30]:
+
+            #save the kernel density estimation of the lambda pdf
+            #kde_lambda_pdf = kde_lambda_dist[i,-1]
+            #lambda_cont = np.linspace(lambda_bin_centers[0], lambda_bin_centers[-1], 1000)
+
+            ax_lambda_dist.errorbar(lambda_bin_centers[::2], lambda_bin_content[::2], yerr = lambda_bin_error[::2], color = color_array[i], marker = 'o', linestyle = 'None', markersize = 4, mfc = 'white')
+            ax_lambda_dist.plot(fitted_lambda_dist[2], fitted_lambda_dist[3], color = color_array[i])
+            #ax_lambda_dist.plot(lambda_cont, kde_lambda_pdf(lambda_cont), color = color_array[i], linestyle = 'dashed')
+
+            #is_positive = lambda_bin_content > 0
+            #residuals = (lambda_bin_content[is_positive] - kde_lambda_pdf(lambda_bin_centers[is_positive])) / lambda_bin_content[is_positive]
+
+            #ax_kde_lambda_dist.plot(lambda_bin_centers[is_positive], 100*residuals, color = color_array[i], linestyle = 'dashed')
 
     #plot the distribution of lambda per expected value of events
     for i in range(len(corrected_lambda_dist_per_mu)):
 
-        #save correspoding value of mu
-        mu_low_edge = corrected_lambda_dist_per_mu['mu_low_edges'].loc[i]
+        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, corrected_lambda_dist_per_mu)
 
-        #save the bins edges of the lambda distribution
-        lambda_bin_edges = np.array(corrected_lambda_dist_per_mu['lambda_bin_edges'].loc[i])
-        lambda_bin_content = np.array(corrected_lambda_dist_per_mu['lambda_bin_content'].loc[i])
+        #define the initial point of the fit and fit the lambda distribution
+        cdf_lambda = np.cumsum(lambda_bin_content)
+        fit_initial =  lambda_bin_centers[cdf_lambda > quantile][0]
 
-        #compute bin centers
-        lambda_bin_centers = get_bin_centers(lambda_bin_edges)
+        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial)
 
-        #compute bin errors
-        lambda_bin_error = np.sqrt(lambda_bin_content)
+        #fill arrays
+        mean = np.sum(lambda_bin_centers*lambda_bin_content) / np.sum(lambda_bin_content)
+        second_moment = np.sum((lambda_bin_centers**2)*lambda_bin_content) / np.sum(lambda_bin_content)
+        sigma = np.sqrt(second_moment - mean**2)
 
-        #normalize distribution
-        integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
+        mean_corrected_lambda.append(mean)
+        sigma_corrected_lambda.append(sigma)
+        beta_corrected_lambda.append(fitted_lambda_dist[0][1])
+        beta_corrected_lambda_error.append(fitted_lambda_dist[1][1])
 
-        lambda_bin_content = lambda_bin_content / integral
-        lambda_bin_error = lambda_bin_error / integral
+        #save the fitted cdf of the lambda distribution
+        cdf_bin_centers, cdf_bin_content, fit_init, tail_slope = get_lambda_cdf([lambda_bin_centers, lambda_bin_content], fitted_lambda_dist)
+
+        cdf_corrected_lambda_dist.append([mu_low_edge, mu_upper_edge, cdf_bin_centers, cdf_bin_content, fit_init, tail_slope])
 
         #plot distribution for some cases
-        #if mu_low_edge in [20, 22, 24]:
-        ax_corrected_lambda_dist.plot(lambda_bin_centers, lambda_bin_content, color = color_array[i], marker = 'o', markersize = 5)
+        if mu_low_edge in [20, 22, 24, 28, 30]:
+
+            #save the kernel density estimation of the lambda pdf
+            #kde_lambda_pdf = kde_corrected_lambda_dist[i,-1]
+            #lambda_cont = np.linspace(lambda_bin_centers[0], lambda_bin_centers[-1], 1000)
+
+            ax_corrected_lambda_dist.errorbar(lambda_bin_centers[::2], lambda_bin_content[::2], yerr = lambda_bin_error[::2], color = color_array[i], marker = 'o', linestyle = 'None', markersize = 3)
+            ax_corrected_lambda_dist.plot(fitted_lambda_dist[2], fitted_lambda_dist[3], color = color_array[i])
+            #ax_corrected_lambda_dist.plot(lambda_cont, kde_lambda_pdf(lambda_cont), color = color_array[i], linestyle = 'dashed')
+
+            #is_positive = lambda_bin_content > 0
+            #residuals = (lambda_bin_content[is_positive] - kde_lambda_pdf(lambda_bin_centers[is_positive])) / lambda_bin_content[is_positive]
+
+            #ax_kde_corrected_lambda_dist.plot(lambda_bin_centers[is_positive], 100*residuals, color = color_array[i], linestyle = 'dashed')
+
+    #plot moments as a function of mean number of events
+    ax_mean_mu_func.scatter(sigma_lambda, mean_lambda, edgecolors = color_array, marker = 'o', linestyle = 'None', s = 10, facecolor = 'lightgrey')
+    ax_mean_mu_func.scatter(sigma_corrected_lambda, mean_corrected_lambda, c = color_array, marker = 'o', linestyle = 'None', s = 7)
+
+    ax_beta_mu_func.errorbar(mu_array, beta_lambda, yerr = beta_lambda_error, color = 'tab:blue', marker = 'o', linestyle = 'None', markersize = 4, mfc = 'white')
+    ax_beta_mu_func.errorbar(mu_array, beta_corrected_lambda, yerr = beta_corrected_lambda_error, color = 'tab:blue', marker = 'o', linestyle = 'None', markersize = 3)
 
     #define the style of the plot
     ax_lambda_dist.set_yscale('log')
-    ax_corrected_lambda_dist.set_yscale('log')
+    ax_lambda_dist.set_xlim(-30, 100)
+    ax_lambda_dist.set_ylim(1e-7, 1)
 
+    ax_kde_lambda_dist.set_xlim(-30, 100)
+    ax_kde_lambda_dist.set_ylim(-20, 20)
+
+    ax_corrected_lambda_dist.set_yscale('log')
+    ax_corrected_lambda_dist.set_xlim(-30, 100)
+    ax_corrected_lambda_dist.set_ylim(1e-7, 1)
+
+    ax_kde_corrected_lambda_dist.set_xlim(-30, 100)
+    ax_kde_corrected_lambda_dist.set_ylim(-20, 20)
+
+    ax_mean_mu_func.set_ylim(-1, 20)
+    ax_beta_mu_func.set_ylim(0.15, 0.35)
+
+    #plot colorbars
+    create_colorbar(fig_lambda_dist, ax_lambda_dist, colormap, r'$\mu$', [mu_array.min(), mu_array.max()], 14)
+    create_colorbar(fig_lambda_dist, ax_corrected_lambda_dist, colormap, r'$\mu$', [mu_array.min(), mu_array.max()], 14)
+    create_colorbar(fig_lambda_dist, ax_mean_mu_func, colormap, r'$\mu$', [mu_array.min(), mu_array.max()], 14)
+
+    #define the style of the axis
     ax_lambda_dist = set_style(ax_lambda_dist, '', r'$\Lambda$', r'$f_{\Lambda}(\Lambda)$', 14)
     ax_corrected_lambda_dist = set_style(ax_corrected_lambda_dist, '', r'$\Lambda$', r'$f_{\Lambda}(\Lambda)$', 14)
+    ax_kde_lambda_dist = set_style(ax_kde_lambda_dist, '', r'$\Lambda$', r'$1 - \frac{\hat{f}_{\Lambda}(\Lambda)}{f_{\Lambda}(\Lambda)} (\%)$', 14)
+    ax_kde_corrected_lambda_dist = set_style(ax_kde_corrected_lambda_dist, '', r'$\Lambda$', r'$1 - \frac{\hat{f}_{\Lambda}(\Lambda)}{f_{\Lambda}(\Lambda)} (\%)$', 14)
+    ax_mean_mu_func = set_style(ax_mean_mu_func, '', r'$\sigma(\Lambda)$', r'$\langle \Lambda \rangle$', 14)
+    ax_beta_mu_func = set_style(ax_beta_mu_func, '', r'$\mu$', r'$\beta$', 14)
 
+    ax_mean_mu_func.set_facecolor('lightgray')
+    #save figure
     fig_lambda_dist.tight_layout()
     fig_lambda_dist.savefig(os.path.join(output_path, 'Lambda_distribution_patchRadius_%.0f_targetRadius_%.1f.pdf' % (np.degrees(patch_radius), np.degrees(target_radius))))
 
-    #save number of events
-    # n_events = 1e5 #make this more flexible in the future
-    # obs_time = 1 #in decades
-    # rate = n_events / obs_time #in events per decade
-    # target_radius = np.radians(1)
-    # area_of_target = 2*np.pi*(1 - np.cos(target_radius))
+    #save the cdfs in the corresponding files
+    column_names = ['mu_low_edges', 'mu_upper_edges', 'lambda_bin_centers', 'cdf_lambda_bin_content', 'fit_init', 'tail_slope']
 
-    # fig_lambda_dist = plt.figure(figsize=(10, 4))
-    # ax_lambda_dist = fig_lambda_dist.add_subplot(121)
-    # ax_lambda_tail_slope = fig_lambda_dist.add_subplot(122)
+    cdf_lambda_dist = pd.DataFrame(cdf_lambda_dist, columns = column_names)
+    cdf_corrected_lambda_dist = pd.DataFrame(cdf_corrected_lambda_dist, columns = column_names)
 
-    # #save the color map
-    # colormap = plt.get_cmap('RdBu') #.reversed()
-    #
-    # #color_array = np.linspace(0, 1, len(rate_bin_low_edges))
-    #
-    # for i, rate_low_edge in enumerate(rate_bin_low_edges):
-    #
-    #     #save rate upper edge
-    #     rate_upper_edge = rate_bin_upper_edges[i]
-    #
-    #     #define the fit range and save fit parameters
-    #     fit_range = np.linspace(lambda_fit[0][i], max(lambda_dist[0][i]), 1000)
-    #     fit_norm = lambda_fit[1][i][0]
-    #     fit_slope = lambda_fit[2][i][0]
-    #
-    #     #plot the lambda distribution
-    #     if rate_upper_edge % 3 == 0:
-    #
-    #         ax_lambda_dist.errorbar(lambda_dist[0][i], lambda_dist[1][i] / sum(lambda_dist[1][i]), yerr=lambda_dist[2][i] / sum(lambda_dist[1][i]), color = color_map(color_array[i]), alpha = .5, linewidth = 1, linestyle='None', marker='o', markersize=1)
-    #         ax_lambda_dist.plot(fit_range, (fit_norm / sum(lambda_dist[1][i]))*np.exp(-fit_slope*fit_range), color = color_map(color_array[i]))
-    #
-    #
-    #         #style of axis to plot lambda distribution
-    #         ax_lambda_dist = set_style(ax_lambda_dist, '', r'$\Lambda$', 'Prob. density', 12)
-    #         ax_lambda_dist.set_yscale('log')
-    #         ax_lambda_dist.set_ylim(1e-7,.5)
-    #
-    #         cb_lambda_dist = fig_lambda_dist.colorbar(mappable=cm.ScalarMappable(norm=mcolors.Normalize(vmin=min(rate_bin_low_edges), vmax=max(rate_bin_upper_edges)), cmap=color_map), ax=ax_lambda_dist) #, cmap=color_map)
-    #         cb_lambda_dist.ax.set_ylabel(r'$\Gamma \;(\mathrm{decade}^{-1})$', fontsize=12)
-    #
-    #         not_min_slope = lambda_fit_tail_slope != min(lambda_fit_tail_slope)
-    #
-    #         #plot slope as a function of caracteristic time
-    #         ax_lambda_tail_slope.errorbar(rate_bin_centers[not_min_slope], lambda_fit_tail_slope[not_min_slope], yerr=lambda_fit_tail_slope_error[not_min_slope], linestyle='None', marker='o', markersize=3) #, label = r'$\delta \in [%.0f^\circ, %.0f^\circ]$' % (omega_low, omega_high))
-    #         ax_lambda_tail_slope = set_style(ax_lambda_tail_slope, '', r'$\Gamma \;(\mathrm{decade}^{-1})$', r'$\beta$', 12)
-    #
-    #         fig_lambda_dist.tight_layout()
-    #         fig_lambda_dist.savefig(os.path.join(output_path, 'Lambda_distribution_IsotropicSkies_nEvent_%i_targetRadius_%.2f_th%.0f.pdf' % (n_events, np.degrees(target_radius), np.degrees(theta_max)) ))
-    #
-    #
-    #         #define NSIDE parameter
-    #         NSIDE = 128
-    #
-    #         #compute exposure map
-    #         rate_map = rate*area_of_target*get_normalized_exposure_map(NSIDE, theta_max, lat_pao)
-    #
-    #         null_rate = (rate_map == 0)
-    #         rate_map[null_rate] = hp.UNSEEN
-    #         rate_map = hp.ma(rate_map)
-    #
-    #         #save figure
-    #         fig_rate_skymap = plt.figure(figsize=(10,8)) #create figure
-    #
-    #         #plot sky map
-    #         projview(
-    #         rate_map,
-    #         override_plot_properties={'figure_size_ratio' : .6},
-    #         graticule=True,
-    #         graticule_labels=True,
-    #         #title=r"$\omega(\alpha, \delta)$ for $\theta_{\max} = %.0f^\circ$" % np.degrees(theta_max),   #unit=r"$\log_{10}$ (Number of events)",
-    #         xlabel=r"$\alpha$",
-    #         ylabel=r"$\delta$",
-    #         cmap='coolwarm',
-    #         cb_orientation="horizontal",
-    #         projection_type="hammer",
-    #         fontsize={'title':16, 'xlabel':14, 'ylabel':14, 'xtick_label':14, 'ytick_label':14, 'cbar_label' : 14, 'cbar_tick_label' : 14},
-    #         longitude_grid_spacing = 30,
-    #         latitude_grid_spacing = 15,
-    #         xtick_label_color='black',
-    #         min=0,
-    #         max=18.5,
-    #         unit = r'$\Gamma_{\mathrm{target}}(\delta) \;({\mathrm{decade}^{-1}})$',
-    #         )
-    #
-    #         plt.savefig(os.path.join(output_path, 'Skymap_event_rate_nEvents_%i_targetRadius_%.2f_FullEfficiency_th%.0f.pdf' % (n_events, np.degrees(target_radius), np.degrees(theta_max))), dpi=1000)
+    cdf_lambda_output = 'CDF_' + os.path.basename(file_lambda_dist)
+    cdf_corrected_lambda_output = 'CDF_' + os.path.basename(file_corrected_lambda_dist)
+
+    cdf_lambda_dist.to_json(os.path.join(input_path, cdf_lambda_output), index = True)
+    cdf_corrected_lambda_dist.to_json(os.path.join(input_path, cdf_corrected_lambda_output), index = True)
