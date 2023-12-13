@@ -93,12 +93,16 @@ def perform_fit_gumble(bin_centers, bin_content, bin_error, mean, sigma):
     return popt, perr, x, y, chi2
 
 #performs the fit and outputs the graph of the fit function
-def perform_fit_exp(bin_centers, bin_content, bin_error, initial_point):
+def perform_fit_exp(bin_centers, bin_content, bin_error, initial_point, tol):
 
     #convert lists to arrays
     bin_centers = np.array(bin_centers)
     bin_content = np.array(bin_content)
     bin_error = np.array(bin_error)
+
+    #print(bin_centers)
+    #print(bin_content)
+    #print(bin_error)
 
     #if all bin contents are 0, then skip
     if np.all(bin_content == 0):
@@ -177,7 +181,7 @@ def perform_fit_exp(bin_centers, bin_content, bin_error, initial_point):
             y_exp = np.array(exp_fit(fit_bin_centers, *popt))
             chi2 = sum(np.power(y_exp - fit_bin_content, 2) / np.power(fit_bin_error, 2)) / ndf
 
-            if chi2 < 2:
+            if chi2 < tol:
                 print('fit converged!')
                 break
 

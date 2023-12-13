@@ -62,7 +62,7 @@ def save_lambda_cdf(output_path, file_kde_lambda_dist, fit_init, tail_slope):
 
 
 #get the distribution of lambda for a given value of expected number of events
-def get_lambda_dist_per_mu(index, lambda_dist_per_mu):
+def get_lambda_dist_per_mu(index, lambda_dist_per_mu, n_samples):
 
     #save correspoding value of mu
     mu_low_edge = lambda_dist_per_mu['mu_low_edges'].loc[index]
@@ -75,8 +75,14 @@ def get_lambda_dist_per_mu(index, lambda_dist_per_mu):
     #compute bin centers
     lambda_bin_centers = get_bin_centers(lambda_bin_edges)
 
-    #compute bin errors
-    lambda_bin_error = np.sqrt(lambda_bin_content)
+    #clean values of the pdf that are very close to 0
+    is_zero = np.isclose(lambda_bin_content, 0, atol = 1e-7)
+
+    lambda_bin_centers = lambda_bin_centers[np.logical_not(is_zero)]
+    lambda_bin_content = lambda_bin_content[np.logical_not(is_zero)]
+
+    #compute bin errors. Mind that each lambda distribution was estimated from 100 samples of skies, so an additional factor of 100 is needed to estimate the errors
+    lambda_bin_error = np.sqrt(lambda_bin_content) / 100
 
     #normalize distribution
     integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
@@ -141,31 +147,21 @@ if __name__ == '__main__':
         exit()
 
     #load files with the kernel density estimation of Lambda
-    file_kde_lambda_dist = 'GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_200.json' % (np.degrees(patch_radius), np.degrees(target_radius))
-    file_kde_corrected_lambda_dist = 'GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_200.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    n_samples = 100
+    file_kde_lambda_dist = 'GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_%i.json' % (np.degrees(patch_radius), np.degrees(target_radius), n_samples)
+    file_kde_corrected_lambda_dist = 'GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_%i.json' % (np.degrees(patch_radius), np.degrees(target_radius), n_samples)
 
     file_kde_lambda_dist = os.path.join(input_path, file_kde_lambda_dist)
     file_kde_corrected_lambda_dist = os.path.join(input_path, file_kde_corrected_lambda_dist)
 
     #save the corresponding dataframes
-    lambda_dist_per_mu = pd.read_json(file_lambda_dist)
-    corrected_lambda_dist_per_mu = pd.read_json(file_corrected_lambda_dist)
-
-    # #set position of the pierre auger observatory
-    # lat_pao = np.radians(-35.15) # this is the average latitude
-    # long_pao = np.radians(-69.2) # this is the averaga longitude
-    # height_pao = 1425*u.meter # this is the average altitude
-    #
-    # #define the earth location corresponding to pierre auger observatory
-    # pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
-    #
-    # #define theta_max
-    # theta_max = np.radians(80)
+    lambda_dist_per_mu = pd.read_json(file_kde_lambda_dist)
+    corrected_lambda_dist_per_mu = pd.read_json(file_kde_corrected_lambda_dist)
 
     # ------------------------------------------
     # Plot the distribution of Lambda and corrected Lambda for each mu value. Fits the distribution as well
     # ------------------------------------------
-    quantile = 0.95
+    quantile = 0.99
 
     #initialize figure
     fig_lambda_dist = plt.figure(figsize = (15, 5))
@@ -205,13 +201,19 @@ if __name__ == '__main__':
     #plot the distribution of lambda per expected value of events
     for i in range(len(lambda_dist_per_mu)):
 
-        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, lambda_dist_per_mu)
+        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, lambda_dist_per_mu, n_samples)
+
+        #lambda_bin_error = lambda_bin_error / 100
 
         #define the initial point of the fit and fit the lambda distribution
-        cdf_lambda = np.cumsum(lambda_bin_content)
+        cdf_lambda = np.cumsum(lambda_bin_content) / np.sum(lambda_bin_content)
+
         fit_initial =  lambda_bin_centers[cdf_lambda > quantile][0]
 
-        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial)
+        #print(fit_initial)
+
+        #decrease the binning for fitting
+        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial, 2)
 
         #fill arrays
         mean = np.sum(lambda_bin_centers*lambda_bin_content) / np.sum(lambda_bin_content)
@@ -224,7 +226,7 @@ if __name__ == '__main__':
         beta_lambda_error.append(fitted_lambda_dist[1][1])
         fit_init_lambda.append(fitted_lambda_dist[2][0])
 
-        print(fitted_lambda_dist[2][0])
+        # print(fitted_lambda_dist[2][0])
 
         #save the fitted cdf of the lambda distribution
         #cdf_bin_centers, cdf_bin_content, fit_init, tail_slope = get_lambda_cdf([lambda_bin_centers, lambda_bin_content], fitted_lambda_dist)
@@ -238,7 +240,7 @@ if __name__ == '__main__':
             #kde_lambda_pdf = kde_lambda_dist[i,-1]
             #lambda_cont = np.linspace(lambda_bin_centers[0], lambda_bin_centers[-1], 1000)
 
-            ax_lambda_dist.errorbar(lambda_bin_centers[::2], lambda_bin_content[::2], yerr = lambda_bin_error[::2], color = color_array[i], marker = 'o', linestyle = 'None', markersize = 4, mfc = 'white')
+            ax_lambda_dist.errorbar(lambda_bin_centers[::20], lambda_bin_content[::20], yerr = lambda_bin_error[::20], color = color_array[i], marker = 'o', linestyle = 'None', linewidth = 1, markersize = 4, mfc = 'white')
             ax_lambda_dist.plot(fitted_lambda_dist[2], fitted_lambda_dist[3], color = color_array[i])
             #ax_lambda_dist.plot(lambda_cont, kde_lambda_pdf(lambda_cont), color = color_array[i], linestyle = 'dashed')
 
@@ -250,14 +252,18 @@ if __name__ == '__main__':
     #plot the distribution of lambda per expected value of events
     for i in range(len(corrected_lambda_dist_per_mu)):
 
-        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, corrected_lambda_dist_per_mu)
+        mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error = get_lambda_dist_per_mu(i, corrected_lambda_dist_per_mu, n_samples)
 
         #lambda_bin_content = lambda_bin_content[1:-1] #this must be removed
         #define the initial point of the fit and fit the lambda distribution
         cdf_lambda = np.cumsum(lambda_bin_content)
         fit_initial =  lambda_bin_centers[cdf_lambda > quantile][0]
 
-        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial)
+        #print(lambda_bin_centers)
+        #print(lambda_bin_content)
+        #print(fit_initial)
+
+        fitted_lambda_dist = perform_fit_exp(lambda_bin_centers, lambda_bin_content, lambda_bin_error, fit_initial, 2)
 
         #fill arrays
         mean = np.sum(lambda_bin_centers*lambda_bin_content) / np.sum(lambda_bin_content)
@@ -270,7 +276,7 @@ if __name__ == '__main__':
         beta_corrected_lambda_error.append(fitted_lambda_dist[1][1])
         fit_init_corrected_lambda.append(fitted_lambda_dist[2][0])
 
-        print(fitted_lambda_dist[2][0])
+        #print(fitted_lambda_dist[2][0])
 
         #save the fitted cdf of the lambda distribution
         #cdf_bin_centers, cdf_bin_content, fit_init, tail_slope = get_lambda_cdf([lambda_bin_centers, lambda_bin_content], fitted_lambda_dist)
@@ -284,7 +290,7 @@ if __name__ == '__main__':
             #kde_lambda_pdf = kde_corrected_lambda_dist[i,-1]
             #lambda_cont = np.linspace(lambda_bin_centers[0], lambda_bin_centers[-1], 1000)
 
-            ax_corrected_lambda_dist.errorbar(lambda_bin_centers[::2], lambda_bin_content[::2], yerr = lambda_bin_error[::2], color = color_array[i], marker = 'o', linestyle = 'None', markersize = 3)
+            ax_corrected_lambda_dist.errorbar(lambda_bin_centers[::20], lambda_bin_content[::20], yerr = lambda_bin_error[::20], color = color_array[i], marker = 'o', linestyle = 'None', markersize = 3)
             ax_corrected_lambda_dist.plot(fitted_lambda_dist[2], fitted_lambda_dist[3], color = color_array[i])
             #ax_corrected_lambda_dist.plot(lambda_cont, kde_lambda_pdf(lambda_cont), color = color_array[i], linestyle = 'dashed')
 

@@ -35,7 +35,7 @@ def get_lambda_pvalue(index, lambda_dist, lambda_array):
 
     #get the needed parameters
     cdf_bin_centers = get_bin_centers(np.array(lambda_dist.at[index, 'lambda_bin_edges']))
-    cdf_bin_content = np.array(lambda_dist.at[index, 'cdf_lambda_bin_content'])[:-1]
+    cdf_bin_content = np.array(lambda_dist.at[index, 'cdf_lambda_bin_content'])
     fit_initial = lambda_dist.at[index, 'fit_init']
     tail_slope = lambda_dist.at[index, 'tail_slope']
 
@@ -52,9 +52,9 @@ def get_lambda_pvalue(index, lambda_dist, lambda_array):
 
     x = np.linspace(cdf_bin_centers[0], cdf_bin_centers[-1], 10000)
 
-    if index == 0:
-        print(discrete_cdf)
-        print(interpolated_cdf(x))
+    #if index == 0:
+        #print(discrete_cdf)
+        #print(interpolated_cdf(x))
 
     #compute the p-value for the discrete cdf
     lambda_below_fit_init = lambda_array < fit_initial
@@ -63,7 +63,7 @@ def get_lambda_pvalue(index, lambda_dist, lambda_array):
 
     #if lambda_value is above initial point the p_value is analytical
     lambda_above_fit_init = lambda_array >= fit_initial
-    lambda_pvalues[lambda_above_fit_init] = np.nan #(1 - cdf_bin_content[is_discrete_cdf][-1])*np.exp(-tail_slope*(lambda_array[lambda_above_fit_init] - fit_initial))
+    lambda_pvalues[lambda_above_fit_init] = (1 - cdf_bin_content[is_discrete_cdf][-1])*np.exp(-tail_slope*(lambda_array[lambda_above_fit_init] - fit_initial))
 
     return lambda_pvalues
 
@@ -171,8 +171,8 @@ if __name__ == '__main__':
     #save file containing distribution of lambda as a function of rate
     lambda_dist_path = './datasets/lambda_dist'
 
-    file_lambda_dist = 'CDF_GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_200.json' % (np.degrees(patch_radius), np.degrees(target_radius))
-    file_corrected_lambda_dist = 'CDF_GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_200.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_lambda_dist = 'CDF_GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_corrected_lambda_dist = 'CDF_GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
 
     file_lambda_dist = os.path.join(lambda_dist_path, file_lambda_dist)
     file_corrected_lambda_dist = os.path.join(lambda_dist_path, file_corrected_lambda_dist)
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     lambda_pvalue_average = []
     poisson_pvalue_average = []
 
-    for i, file in enumerate(filelist[:1]):
+    for i, file in enumerate(filelist[:10]):
 
         pvalue_data = compute_pvalues(file, file_lambda_dist, file_corrected_lambda_dist)
 
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     #print(lambda_pvalue_average.shape)
 
     x = np.linspace(-6, 0)
-    plt.hist(lambda_pvalue_average, bins = 100, histtype = 'step')
+    plt.hist(lambda_pvalue_average, bins = 100, range = [0, .1], histtype = 'step')
     #plt.plot(x, (len(lambda_pvalue_average) * 6 / 100)*np.log(10)*np.power(10, x))
     #plt.yscale('log')
     #plt.hist(poisson_pvalue_average, bins = 100, histtype = 'step')

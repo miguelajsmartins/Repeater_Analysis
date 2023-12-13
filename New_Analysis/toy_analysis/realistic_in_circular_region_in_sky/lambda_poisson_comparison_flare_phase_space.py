@@ -9,92 +9,27 @@ from astropy.time import Time
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz
 import astropy.units as u
 
+from scipy.stats import poisson
+
 import sys
 import os
+import pickle
 
 sys.path.append('../src/')
 
 from event_manip import time_ordered_events
 from event_manip import ang_diff
-from array_manip import unsorted_search
+from event_manip import compute_directional_exposure
+from event_manip import compute_lambda_correction
 from event_manip import get_principal_ra
+
 from produce_ud_events_in_patch_eqCoord import compute_accepted_events
+from compute_estimators_pvalue_binned_targets import get_lambda_pvalue
 
-#compute phi for u uniform in [0, 1]
-def compute_phi(u):
-    return 2*np.pi*u
+#removes events outside patch in the sky
+def get_events_in_patch(dec, ra, dec_center, patch_radius):
 
-#convert zenith to altitude
-def zenith_to_alt(theta):
-    return np.pi/2 - theta
-
-#scramble events by suffling event sidereal time and theta independently, and sampling phi from uniform dist
-def get_flare_events(flare_data, flare_duration, initial_events_per_flare, final_events_per_flare, resolution, seed, pao_loc, theta_max):
-
-    #save coordinates of flare
-    flare_dec = np.radians(flare_data['dec_flare'].to_numpy())
-    flare_ra = np.radians(flare_data['ra_flare'].to_numpy())
-
-    #define the beginning and end of flare
-    flare_begin = flare_data['gps_time_flare'].to_numpy()
-    flare_end = flare_begin + flare_duration
-
-    #define seed
-    np.random.seed(seed)
-
-    #select, with uniform dist, time stamps for events, and angular positions following a gaussian distribution
-    event_times = np.concatenate([np.random.randint(flare_begin[i], flare_end[i], initial_events_per_flare) for i in range(len(flare_begin))])
-    event_dec = np.concatenate([np.random.normal(flare_dec[i], resolution, initial_events_per_flare) for i in range(len(flare_begin))])
-    event_ra = np.concatenate([np.random.normal(flare_ra[i], resolution, initial_events_per_flare) for i in range(len(flare_begin))])
-    event_lst = Time(event_times, format='gps', scale='utc', location=pao_loc).sidereal_time('apparent').rad
-    event_theta = ang_diff(event_dec, pao_loc.lat.rad, event_ra, event_lst)
-
-    #exclude flare events outside FoV of observatory
-    inside_fov = event_theta < theta_max
-    event_times, event_ra, event_dec, event_theta, event_lst = event_times[inside_fov], event_ra[inside_fov], event_dec[inside_fov], event_theta[inside_fov], event_lst[inside_fov]
-
-    #save only final_events_per_flare from each flare
-    accepted_event_times = np.concatenate([np.random.choice(event_times[(event_times > flare_begin[i]) & (event_times < flare_end[i])], size = final_events_per_flare, replace=False) for i in range(len(flare_begin))])
-    accepted_time_indices = unsorted_search(event_times, accepted_event_times)
-
-    accepted_event_ra, accepted_event_dec, accepted_event_theta, accepted_event_lst = event_ra[accepted_time_indices], event_dec[accepted_time_indices], event_theta[accepted_time_indices], event_lst[accepted_time_indices]
-    accepted_flare_ra = np.concatenate(np.transpose(np.array([flare_ra for i in range(final_events_per_flare)])))
-    accepted_flare_dec = np.concatenate(np.transpose(np.array([flare_dec for i in range(final_events_per_flare)])))
-
-    #accepted_flare_dec =
-    #save flare events in dataframe
-    flare_events = pd.DataFrame(zip(accepted_event_times, np.degrees(accepted_event_ra), np.degrees(accepted_event_dec), np.degrees(accepted_event_theta), np.degrees(accepted_event_lst)), columns=['gps_time', 'ra', 'dec', 'theta', 'lst'])
-
-    flare_events['is_from_flare'] = pd.Series(np.full(len(flare_events.index), True, dtype=bool))
-    flare_events['flare_dec'] = pd.Series(np.degrees(accepted_flare_dec))
-    flare_events['flare_ra'] = pd.Series(np.degrees(accepted_flare_ra))
-
-    return flare_events
-
-#contaminate a sample of isotropic skies with events from flares and keeps only events within a patch around the flare
-def get_accepted_events_around_flare(ra_flare, dec_flare, begin_date, end_date, target_radius, pao_loc, patch_radius, theta_max):
-
-    #define the matrix of flare durations and flare intensities
-    flare_intensity = np.linspace(2, 20, 19)
-    flare_duration = np.logspace(-4, 0, 5, base = 10)*obs_time
-
-    #define the maximum number of events, out of which a few will be accepted, according to the flare intensity
-    n_events = 100 #this must be greater than the maximum flare intensity
-    n_durations = len(flare_duration)
-
-    #define a grid of flare_intensities and durations
-    #flare_intensity, flare_duration = np.meshgrid(flare_intensity, flare_duration)
-
-    #time stamps and coordinates of events from flare
-    shape = (n_events, n_durations)
-    times = flare_duration[np.newaxis,:]*np.random.random(shape) + begin_date
-
-    times = Time(times, scale = 'utc', format = 'gps', location = pao_loc)
-    dec = np.random.normal(dec_flare, target_radius, shape)
-    ra = get_principal_ra(np.random.normal(ra_flare, target_radius, shape))
-
-    #filter out events outside the patch
-    delta_ra = np.arccos( (np.cos(patch_radius) - np.sin(dec_flare)*np.sin(dec)) / (np.cos(dec)*np.cos(dec_flare)) )
+    delta_ra = np.arccos( (np.cos(patch_radius) - np.sin(dec_center)*np.sin(dec)) / (np.cos(dec)*np.cos(dec_center)) )
 
     ra_right = get_principal_ra(ra_center + delta_ra)
     ra_left = get_principal_ra(ra_center - delta_ra)
@@ -105,33 +40,222 @@ def get_accepted_events_around_flare(ra_flare, dec_flare, begin_date, end_date, 
     ra = ma.masked_array(ra, mask = np.logical_not(in_patch)).filled(fill_value = np.nan)
     dec = ma.masked_array(dec, mask = np.logical_not(in_patch)).filled(fill_value = np.nan)
 
+    return ra, dec
+
+#contaminate a sample of isotropic skies with events from flares and keeps only events within a patch around the flare
+def get_accepted_events_around_flare(ra_flare, dec_flare, begin_date, end_date, target_radius, pao_loc, patch_radius, theta_max):
+
+    #define the matrix of flare durations and flare intensities
+    max_intensity = 15
+    n_intensities = max_intensity - 1
+    n_durations = 19
+
+    flare_intensity = np.linspace(2, max_intensity, n_intensities).astype('int')
+    flare_duration = np.logspace(-4, 0, n_durations, base = 10)*obs_time
+
+    #define the maximum number of events, out of which a few will be accepted, according to the flare intensity
+    n_events = 200 #this must be greater than the maximum flare intensity
+
+    #time stamps and coordinates of events from flare
+    shape = (n_durations, n_events)
+    gps_times = flare_duration[:,np.newaxis]*np.random.random(shape) + begin_date
+
+    times = Time(gps_times, scale = 'utc', format = 'gps', location = pao_loc)
+    dec = np.random.normal(dec_flare, target_radius, shape)
+    ra = get_principal_ra(np.random.normal(ra_flare, target_radius, shape))
+
+    #filter out events outside the patch
+    ra, dec = get_events_in_patch(dec, ra, dec_flare, patch_radius)
+
     #accept events
     accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = compute_accepted_events(times, ra, dec, pao_loc, theta_max)
 
-    print(accepted_ra[:,1])
+    #order events by time. Consequently, all nan values are sent to the end of the arrays
+    accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst = time_ordered_events(accepted_time, accepted_ra, accepted_dec, accepted_theta, accepted_lst)
+
+    #sets the probability of selecting nan values to 0 and normalized the probability
+    choice_prob = np.ones(accepted_time.shape)
+    is_nan = np.isnan(accepted_time)
+    choice_prob = ma.masked_array(choice_prob, mask = is_nan).filled(fill_value = 0)
+    choice_prob = choice_prob / np.sum(choice_prob, axis = 1)[:,np.newaxis]
+
+    #define a matrix of flare events for each type of flare
+    flare_event_times = np.full((n_intensities, n_durations, max_intensity), np.nan)
+    flare_event_dec = flare_event_times.copy()
+    flare_event_ra = flare_event_times.copy()
+    flare_event_theta = flare_event_times.copy()
+    flare_event_lst = flare_event_times.copy()
+
+    for i, intensity in enumerate(flare_intensity):
+
+        for j, duration in enumerate(flare_duration):
+
+            event_indices = np.random.choice(accepted_time.shape[1], size = intensity, replace = False, p = choice_prob[j,:])
+
+            flare_event_times[i, j, :intensity] = accepted_time[j, event_indices]
+            flare_event_dec[i, j, :intensity] = accepted_dec[j, event_indices]
+            flare_event_ra[i, j, :intensity] = accepted_ra[j, event_indices]
+            flare_event_theta[i, j, :intensity] = accepted_theta[j, event_indices]
+            flare_event_lst[i, j, :intensity] = accepted_lst[j, event_indices]
+
+    return flare_duration, flare_intensity, np.stack([flare_event_times, flare_event_ra, flare_event_dec, flare_event_theta, flare_event_lst])
+
+#contaminates isotropic sample with flare events for a lattice of flare types, and filter only the events in the target around the flare
+# it assumes that iso_sample is already an array and that flare sample is of the form (event_attributes, n_flare_intensities, n_flare_durations, n_events_from_flare)
+def get_flare_and_iso_events_around_flare(iso_sample, flare_sample, ra_flare, dec_flare, target_radius):
+
+    #save important quantities
+    n_intensities = flare_sample.shape[1]
+    n_durations = flare_sample.shape[2]
+    max_events_from_flare = flare_sample.shape[3]
+    max_events = iso_sample.shape[1] + max_events_from_flare
+
+    #define the number of events to remove
+    n_events_from_flare = np.linspace(2, max_events_from_flare, n_intensities).astype('int')
+    n_events_to_keep = iso_sample.shape[1] - n_events_from_flare
+
+    #tile sample of isotropy for each point the flare phase-space
+    tiled_iso_sample = np.tile(iso_sample, (n_intensities, n_durations, 1, 1))
+    tiled_iso_sample = np.transpose(tiled_iso_sample, axes = (2, 0, 1, 3))
+
+    #copy tiled iso sample
+    contaminated_iso_sample = np.empty(tiled_iso_sample.shape)
+
+    for i in range(n_intensities):
+
+        for j in range(n_durations):
+
+            for k, bg_signal in enumerate(n_events_to_keep):
+
+                #save events per flare
+                flare_signal = n_events_from_flare[k]
+
+                #choose events from isotropic background to keep
+                iso_sample_indices = np.random.choice(tiled_iso_sample.shape[-1], size = bg_signal, replace = False)
+
+                #compute full samples
+                contaminated_iso_sample[:,i,j,:bg_signal] = tiled_iso_sample[:,i,j, iso_sample_indices]
+                contaminated_iso_sample[:,i,j, bg_signal:] = flare_events[:,i,j,:flare_signal]
+
+
+    #filter events that are outside the target around the flare
+    ang_sep = ang_diff(contaminated_iso_sample[2,:,:,:], dec_flare, contaminated_iso_sample[1,:,:,:], ra_flare)
+
+    in_flare_target = ang_sep < target_radius
+
+    sample_times = ma.masked_array(contaminated_iso_sample[0], mask = np.logical_not(in_flare_target)).filled(fill_value = np.nan)
+    sample_ra = ma.masked_array(contaminated_iso_sample[1], mask = np.logical_not(in_flare_target)).filled(fill_value = np.nan)
+    sample_dec = ma.masked_array(contaminated_iso_sample[2], mask = np.logical_not(in_flare_target)).filled(fill_value = np.nan)
+    sample_theta = ma.masked_array(contaminated_iso_sample[3], mask = np.logical_not(in_flare_target)).filled(fill_value = np.nan)
+    sample_lst = ma.masked_array(contaminated_iso_sample[4], mask = np.logical_not(in_flare_target)).filled(fill_value = np.nan)
+
+    #order events in time. this pushes all the nan values to the end
+    sorted_indices = sample_times.argsort(axis = 2)
+
+    sorted_times = np.take_along_axis(sample_times, sorted_indices, axis = 2)
+    sorted_ra = np.take_along_axis(sample_ra, sorted_indices, axis = 2)
+    sorted_dec = np.take_along_axis(sample_dec, sorted_indices, axis = 2)
+    sorted_theta = np.take_along_axis(sample_theta, sorted_indices, axis = 2)
+    sorted_lst = np.take_along_axis(sample_lst, sorted_indices, axis = 2)
+
+    #if all values are nan for a given index, accross the flare-phase space, then eliminate them
+    all_nan = np.all(np.isnan(sorted_times), axis = (0, 1))
+
+    sorted_times = sorted_times[:,:,np.logical_not(all_nan)]
+    sorted_dec = sorted_dec[:,:,np.logical_not(all_nan)]
+    sorted_ra = sorted_ra[:,:,np.logical_not(all_nan)]
+    sorted_theta = sorted_theta[:,:,np.logical_not(all_nan)]
+    sorted_lst = sorted_lst[:,:,np.logical_not(all_nan)]
+
+    return np.stack([sorted_times, sorted_dec, sorted_ra, sorted_theta, sorted_lst])
+
+#compute estimators for each contaminated sample with a grid of flare configurations
+def compute_estimators_in_flare_target(event_data, mu_at_flare, obs_time):
+
+    #save event times. Note that events are already ordered in time
+    event_times = event_data[0]
+
+    #save expected rate at flare
+    rate_at_flare = mu_at_flare / obs_time
+
+    #count the number of events for each flare configuration
+    is_nan = np.isnan(event_times)
+    n_events_at_flare = np.count_nonzero(ma.masked_array(event_times, mask = is_nan).filled(fill_value = 0), axis = 2)
+
+    #compute estimators for each flare type
+    time_diff = np.diff(event_times, axis = 2)
+    time_diff = time_diff*rate_at_flare
+
+    #compute lambda and corrected lambda
+    lambda_value = -np.nansum(np.log(time_diff), axis = 2)
+    corrected_lambda_value = lambda_value - compute_lambda_correction(n_events_at_flare, mu_at_flare)
+
+    #save number of events and lambda estimations
+    estimator_data = np.stack([n_events_at_flare, lambda_value, corrected_lambda_value])
+
+    return estimator_data
+
+#compute pvalues for each of the estimators
+def compute_estimators_pvalues(estimator_data, lambda_dist, corrected_lambda_dist, mu_at_flare):
+
+    #given the expected number of events in each target
+    mu_bins = np.append(lambda_dist['mu_low_edges'].to_numpy(), np.array(lambda_dist['mu_upper_edges'].values)[-1])
+    index = np.searchsorted(mu_bins, mu_at_flare) - 1
+
+    pvalues_lambda = get_lambda_pvalue(index, lambda_dist, estimator_data[1])
+    pvalues_corrected_lambda = get_lambda_pvalue(index, corrected_lambda_dist, estimator_data[2])
+    pvalues_poisson = 1 - .5*(poisson.cdf(estimator_data[0] - 1, mu_at_flare) + poisson.cdf(estimator_data[0], mu_at_flare))
+
+    #save the pvalue data
+    pvalue_data = np.stack([pvalues_poisson, pvalues_lambda, pvalues_corrected_lambda])
+
+    return pvalue_data
 
 #define the main fuction
 if __name__ == '__main__':
 
+    #fix seed
+    seed = 47
+    np.random.seed(seed)
+
     #define important quantities
-    #define the input path and save files with event samples
     dec_center = np.radians(-30)
     ra_center = np.radians(0)
     patch_radius = np.radians(25)
     target_radius = np.radians(1.5)
+    n_events = 100_000
 
-    # input_path = './datasets/iso_samples/decCenter_%.0f' % np.degrees(dec_center)
-    # input_filelist = []
-    #
-    # for file in os.listdir(input_path):
-    #
-    #     filename = os.path.join(input_path, file)
-    #
-    #     if os.path.isfile(filename) and '%.0f' % np.degrees(patch_radius) in filename:
-    #
-    #         input_filelist.append(filename)
-    #
-    # #set position of the pierre auger observatory
+    #define the input path and save files with event samples
+    input_path = './datasets/iso_samples/decCenter_%.0f' % np.degrees(dec_center)
+    input_filelist = []
+
+    for file in os.listdir(input_path):
+
+        filename = os.path.join(input_path, file)
+
+        if os.path.isfile(filename) and '%.0f' % np.degrees(patch_radius) in filename:
+
+            input_filelist.append(filename)
+
+    #read files with the lambda distribution per expected events
+    lambda_dist_path = './datasets/lambda_dist'
+
+    file_lambda_dist = 'CDF_GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_corrected_lambda_dist = 'CDF_GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+
+    file_lambda_dist = os.path.join(lambda_dist_path, file_lambda_dist)
+    file_corrected_lambda_dist = os.path.join(lambda_dist_path, file_corrected_lambda_dist)
+
+    #check if both requested file exist
+    if (not os.path.exists(file_lambda_dist)) or (not os.path.exists(file_lambda_dist)):
+        print('One of the requested files does not exist!')
+        exit()
+
+    #save dataframes with the lambda distribution
+    lambda_dist = pd.read_json(file_lambda_dist)
+    corrected_lambda_dist = pd.read_json(file_corrected_lambda_dist)
+
+    #set position of the pierre auger observatory
     pao_lat = np.radians(-35.15) # this is the average latitude
     pao_long = np.radians(-69.2) # this is the averaga longitude
     pao_height = 1425*u.meter # this is the average altitude
@@ -147,146 +271,75 @@ if __name__ == '__main__':
     time_end = Time('2020-01-01T00:00:00', scale = 'utc', format = 'fits').gps
     obs_time = time_end - time_begin
 
-    #define the number of samples
-    #n_samples = 1_000
+    #compute the expected number of events in the position of the flare
+    dec_array = np.linspace(-np.pi / 2, np.pi / 2 , 1000)
+    exposure_array = compute_directional_exposure(dec_array, theta_max, pao_lat)
+    integrated_exposure = 2*np.pi*np.trapz(exposure_array*np.cos(dec_array), x = dec_array)
 
+    target_area = 2*np.pi*(1 - np.cos(target_radius))
+    exposure_at_flare = compute_directional_exposure([dec_center], theta_max, pao_lat) / integrated_exposure
+    mu_at_flare = n_events*exposure_at_flare*target_area
+    mu_at_flare = mu_at_flare[0]
+
+    print('Expected number of events in flare target: mu = %.2f' % mu_at_flare)
+
+    #make samples with a grid of flares with different durations and intensities
     start = datetime.now()
 
-    get_accepted_events_around_flare(ra_center, dec_center, time_begin, time_end, target_radius, pao_loc, patch_radius, theta_max)
+    estimator_data_all_samples = []
+    pvalues_data_all_samples = []
 
-    print('This took', datetime.now() - start)
+    for i, file in enumerate(input_filelist[:10]):
 
-    #
-    # #defines the number of events
-    # n_events = 100_000
-    #
-    # #defines the maximum and minimum declinations
-    # dec_max = dec_center + patch_radius
-    # dec_min = dec_center - patch_radius
-    #
-    # #defines the NSIDE parameter
-    # NSIDE = 128
-    # npix = hp.nside2npix(NSIDE)
-    #
-    # #defines the target radius
-    # target_radius = np.radians(1.5)
-    # target_area = 2*np.pi*(1 - np.cos(target_radius))
-    #
-    # #define the tau parameter
-    # tau = 86_164 #in seconds
-    #
-    # #compute the coordinates of the center of each bin and transform them into ra and dec. Compute the corresponding exposure map
-    # all_pixel_indices = np.arange(npix)
-    # ra_target, colat_center = get_binned_sky_centers(NSIDE, all_pixel_indices)
-    # full_dec_target = colat_to_dec(colat_center)
-    #
-    # #filter out bins such that targets are partially or fully outside circular patch
-    # ra_target, dec_target = get_bins_in_patch(ra_target, full_dec_target, ra_center, dec_center, patch_radius, target_radius)
-    #
-    # #order targets by declination
-    # sorted_indices = dec_target.argsort()
-    # ra_target, dec_target = ra_target[sorted_indices], dec_target[sorted_indices]
-    #
-    # #compute the normalized exposure
-    # unique_dec_target = np.unique(full_dec_target)
-    # unique_exposure = compute_directional_exposure(unique_dec_target, theta_max, pao_lat)
-    # integrated_exposure = 2*np.pi*np.trapz(unique_exposure*np.cos(unique_dec_target), x = unique_dec_target)
-    #
-    # #compute the normalized exposure map
-    # exposure_map = compute_directional_exposure(dec_target, theta_max, pao_lat) / integrated_exposure
+        #save corresponding dataframe and convert to array
+        iso_sample = pd.read_parquet(file, engine = 'fastparquet')
 
-    #save the files with isotropic distribution of flares
+        iso_sample['dec'] = np.radians(iso_sample['dec'])
+        iso_sample['ra'] = np.radians(iso_sample['ra'])
+        iso_sample['theta'] = np.radians(iso_sample['theta'])
+        iso_sample['lst'] = np.radians(iso_sample['lst'])
 
-# #define the number of flares, events per flare and duration of flare in seconds
-# if (len(sys.argv) < 5):
-#     print('You must give file to contaminate, number of flares, number of evenents per flare and duration of flare in days')
-#     exit()
-#
-# #save file name
-# filename = sys.argv[1]
-#
-# #checks if file exists
-# if not os.path.exists(filename):
-#     print("Requested file does not exist. Aborting")
-#     exit()
-#
-# #save path to file and its basename
-# path_name = os.path.dirname(filename)
-# basename = os.path.splitext(os.path.basename(filename))[0]
-#
-# #save dataframe with isotropic events
-# event_data = pd.read_parquet(filename, engine = 'fastparquet')
-#
-# #flag events that are not from explosion
-# event_data['is_from_flare'] = pd.Series(np.full(len(event_data.index), False, dtype=bool))
-# event_data['flare_dec'] = pd.Series(np.full(len(event_data.index), np.nan))
-# event_data['flare_ra'] = pd.Series(np.full(len(event_data.index), np.nan))
-#
-# print(event_data.head(10))
-#
-# #save dataframe with flares
-# flare_catalog = './datasets/MockFlares_1000_2010-01-01_2020-01-01.parquet'
-# flare_data = pd.read_parquet(flare_catalog, engine='fastparquet')
-#
-# #set position of the pierre auger observatory
-# lat_pao = np.radians(-35.15) # this is the average latitude
-# long_pao = np.radians(-69.2) # this is the averaga longitude
-# height_pao = 1425*u.meter # this is the average altitude
-#
-# #define the earth location corresponding to pierre auger observatory
-# pao_loc = EarthLocation(lon=long_pao*u.rad, lat=lat_pao*u.rad, height=height_pao)
-#
-# #define the maximum value of theta
-# theta_max = np.radians(80)
-#
-# #filter flares outside field of view of observatory
-# flare_data = flare_data[flare_data['dec_flare'] < np.degrees(theta_max + lat_pao)]
-#
-# n_flares = int(sys.argv[2])
-# flare_duration_days = int(sys.argv[3])
-# flare_duration = int(sys.argv[3])*86_164
-# final_events_per_flare = int(sys.argv[4])
-# initial_events_per_flare = 100*final_events_per_flare
-#
-# #define the angular resolution
-# ang_resol = np.radians(1)
-#
-# #fix seed for choosing a sample of flares from dataframe
-# seed_flare = 10
-#
-# #sample n_flares from flare catalog
-# start_time = datetime.now()
-#
-# flare_data = flare_data.sample(n_flares, random_state=seed_flare).reset_index()
-#
-# print(flare_data)
-#
-# #producing flare events
-# flare_events = get_flare_events(flare_data, flare_duration, initial_events_per_flare, final_events_per_flare, ang_resol, seed_flare, pao_loc, theta_max)
-#
-# print(flare_events)
-#
-# #substituting events in ud distribution with flare events
-# selected_events = event_data.sample(len(flare_events.index), random_state=seed_flare)
-# event_data = event_data.drop(selected_events.index)
-# event_data.reset_index(drop=True, inplace=True)
-# event_data = event_data.append(flare_events, ignore_index=True)
-#
-# #order events by time
-# event_data.sort_values('gps_time', inplace = True, ignore_index=True)
-#
-# print(event_data)
-#
-# print('Producing isotropic sample with flare events took', datetime.now() - start_time,'s')
-#
-# output_path = './datasets/events_with_flares/'
-#
-# #create directory whose name includes number of flares and events per flare
-# output_dir = 'nFlares_%i_nEventsPerFlare_%i_FlareDuration_%i' % (n_flares, final_events_per_flare, flare_duration_days)
-# output_path = output_path + output_dir
-#
-# if not os.path.exists(output_path):
-#     os.makedirs(output_path)
-#
-# #save scrambled events
-# event_data.to_parquet(os.path.join(output_path, basename + '_nFlare_%i_nEventsPerFlare_%i_FlareDuration_%i.parquet' % (n_flares, final_events_per_flare, flare_duration_days)), index=True)
+        iso_sample = iso_sample.to_numpy().T
+
+        #produce flare events
+        flare_duration, flare_intensity, flare_events = get_accepted_events_around_flare(ra_center, dec_center, time_begin, time_end, target_radius, pao_loc, patch_radius, theta_max)
+
+        #contaminate isotropic samples with events from flare and filter events coming from target around flare
+        events_around_flare = get_flare_and_iso_events_around_flare(iso_sample, flare_events, ra_center, dec_center, target_radius)
+
+        #compute estimators for each sample per flare type
+        estimators_data = compute_estimators_in_flare_target(events_around_flare, mu_at_flare, obs_time)
+
+        #compute the pvalues for each sample of flares
+        pvalues_data = compute_estimators_pvalues(estimators_data, lambda_dist, corrected_lambda_dist, mu_at_flare)
+
+        estimator_data_all_samples.append(estimators_data)
+        pvalues_data_all_samples.append(pvalues_data)
+
+        print('%i / %i files processed!' % (i, len(input_filelist)))
+
+    print('Processing all samples took', datetime.now() - start)
+
+    #save the combined data for the samples analysed
+    flare_intensity, flare_duration = np.meshgrid(flare_intensity, flare_duration)
+
+    estimator_data_all_samples = np.array(estimator_data_all_samples)
+    pvalues_data_all_samples = np.array(pvalues_data_all_samples)
+
+    #define the name of the output files
+    output_flare_info = 'Info_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_estimators = 'Estimators_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_pvalues = 'PValues_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+
+    #define the output path
+    output_path = './datasets/flare_lattice_study'
+
+    #save files with the results
+    with open(os.path.join(output_path, output_flare_info), 'wb') as file:
+        pickle.dump((flare_intensity, flare_duration), file)
+
+    with open(os.path.join(output_path, output_estimators), 'wb') as file:
+        pickle.dump(estimator_data_all_samples, file)
+
+    with open(os.path.join(output_path, output_pvalues), 'wb') as file:
+        pickle.dump(pvalues_data_all_samples, file)
