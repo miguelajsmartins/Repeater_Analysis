@@ -167,7 +167,7 @@ def get_flare_and_iso_events_around_flare(iso_sample, flare_sample, ra_flare, de
     sorted_theta = sorted_theta[:,:,np.logical_not(all_nan)]
     sorted_lst = sorted_lst[:,:,np.logical_not(all_nan)]
 
-    return np.stack([sorted_times, sorted_dec, sorted_ra, sorted_theta, sorted_lst])
+    return tiled_iso_sample, np.stack([sorted_times, sorted_dec, sorted_ra, sorted_theta, sorted_lst])
 
 #compute estimators for each contaminated sample with a grid of flare configurations
 def compute_estimators_in_flare_target(event_data, mu_at_flare, obs_time):
@@ -286,8 +286,12 @@ if __name__ == '__main__':
     #make samples with a grid of flares with different durations and intensities
     start = datetime.now()
 
-    estimator_data_all_samples = []
-    pvalues_data_all_samples = []
+    #initialize lists to save all contaminated and iso samples
+    estimator_data_flare_samples = []
+    estimator_data_iso_samples = []
+
+    pvalues_data_flare_samples = []
+    pvalues_data_iso_samples = []
 
     for i, file in enumerate(input_filelist[:10]):
 
@@ -305,16 +309,20 @@ if __name__ == '__main__':
         flare_duration, flare_intensity, flare_events = get_accepted_events_around_flare(ra_center, dec_center, time_begin, time_end, target_radius, pao_loc, patch_radius, theta_max)
 
         #contaminate isotropic samples with events from flare and filter events coming from target around flare
-        events_around_flare = get_flare_and_iso_events_around_flare(iso_sample, flare_events, ra_center, dec_center, target_radius)
+        iso_events, events_around_flare = get_flare_and_iso_events_around_flare(iso_sample, flare_events, ra_center, dec_center, target_radius)
 
-        #compute estimators for each sample per flare type
-        estimators_data = compute_estimators_in_flare_target(events_around_flare, mu_at_flare, obs_time)
+        #compute estimators for each sample per flare type, for contaminated and isotropic samples
+        iso_estimators_data = compute_estimators_in_flare_target(iso_events, mu_at_flare, obs_time)
+        flare_estimators_data = compute_estimators_in_flare_target(events_around_flare, mu_at_flare, obs_time)
 
         #compute the pvalues for each sample of flares
-        pvalues_data = compute_estimators_pvalues(estimators_data, lambda_dist, corrected_lambda_dist, mu_at_flare)
+        iso_pvalues_data = compute_estimators_pvalues(iso_estimators_data, lambda_dist, corrected_lambda_dist, mu_at_flare)
+        flare_pvalues_data = compute_estimators_pvalues(flare_estimators_data, lambda_dist, corrected_lambda_dist, mu_at_flare)
 
-        estimator_data_all_samples.append(estimators_data)
-        pvalues_data_all_samples.append(pvalues_data)
+        estimator_data_iso_samples.append(iso_estimators_data)
+        estimator_data_flare_samples.append(flare_estimators_data)
+        pvalues_data_iso_samples.append(iso_pvalues_data)
+        pvalues_data_flare_samples.append(flare_pvalues_data)
 
         print('%i / %i files processed!' % (i, len(input_filelist)))
 
@@ -323,13 +331,18 @@ if __name__ == '__main__':
     #save the combined data for the samples analysed
     flare_intensity, flare_duration = np.meshgrid(flare_intensity, flare_duration)
 
-    estimator_data_all_samples = np.array(estimator_data_all_samples)
-    pvalues_data_all_samples = np.array(pvalues_data_all_samples)
+    estimator_data_iso_samples = np.array(estimator_data_iso_samples)
+    estimator_data_flare_samples = np.array(estimator_data_flare_samples)
+
+    pvalues_data_iso_samples = np.array(pvalues_data_iso_samples)
+    estimator_data_flare_samples = np.array(estimator_data_flare_samples)
 
     #define the name of the output files
     output_flare_info = 'Info_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
-    output_estimators = 'Estimators_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
-    output_pvalues = 'PValues_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_flare_estimators = 'Estimators_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_flare_pvalues = 'PValues_FlareLattice_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_iso_estimators = 'Estimators_IsoDist_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
+    output_iso_pvalues = 'PValues_IsoDist_patchRadius_%.0f_targetRadius_%.1f_samples_%i.pkl' % (np.degrees(patch_radius), np.degrees(target_radius), len(input_filelist))
 
     #define the output path
     output_path = './datasets/flare_lattice_study'
@@ -338,8 +351,14 @@ if __name__ == '__main__':
     with open(os.path.join(output_path, output_flare_info), 'wb') as file:
         pickle.dump((flare_intensity, flare_duration), file)
 
-    with open(os.path.join(output_path, output_estimators), 'wb') as file:
-        pickle.dump(estimator_data_all_samples, file)
+    with open(os.path.join(output_path, output_flare_estimators), 'wb') as file:
+        pickle.dump(estimator_data_flare_samples, file)
 
-    with open(os.path.join(output_path, output_pvalues), 'wb') as file:
-        pickle.dump(pvalues_data_all_samples, file)
+    with open(os.path.join(output_path, output_flare_pvalues), 'wb') as file:
+        pickle.dump(pvalues_data_flare_samples, file)
+
+    with open(os.path.join(output_path, output_iso_estimators), 'wb') as file:
+        pickle.dump(estimator_data_iso_samples, file)
+
+    with open(os.path.join(output_path, output_iso_pvalues), 'wb') as file:
+        pickle.dump(pvalues_data_iso_samples, file)
