@@ -1,12 +1,14 @@
 import numpy as np
 import numpy.ma as ma
 
-x = np.array([[1, 1, 2, 1, 4, 5], [1, 3, 4, 3, 4, 1]], dtype = 'float')
-y = np.array([[1, 5, 9, 2, 1, 4], [20, 14, 2, 4, 5, 2]], dtype = 'float')
+import numpy as np
 
-sorted_indices = x.argsort()
+# Assuming x and y are your arrays with shapes (10, 10, 50)
+x = np.array([[1, 2, 3, 7, 4], [1, 2, 3, 4, 9]])
+y = np.array([[3, 4, 3, 4, 5], [2, 3, 4, 5, 7]])
 
-sorted_y = ma.masked_array(y, mask = sorted_indices).filled(fill_value = np.nan)
+count = [np.sum(y[i, :] < x[i, :, np.newaxis], axis = 1) for i in range(x.shape[0])]
 
-print(y)
-print(sorted_y)
+#count = [np.sum(y[i] < x[i, :, np.newaxis], axis = 1) for i in range(x.shape[0])]
+
+print(count)

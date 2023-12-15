@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 
 #from random import seed
@@ -21,6 +22,9 @@ import pickle
 sys.path.append('../src/')
 
 from hist_manip import data_2_binned_errorbar
+
+from event_manip import compute_directional_exposure
+
 #from fit_routines import perform_fit_exp
 
 from axis_style import set_style
@@ -104,6 +108,21 @@ plt.rcParams.update({
 #
 #     return ax
 
+def get_mu_around_flare(ra_flare, dec_flare, target_radius, theta_max, pao_lat, n_events):
+
+    #compute the expected number of events in the position of the flare
+    dec_array = np.linspace(-np.pi / 2, np.pi / 2 , 1000)
+    exposure_array = compute_directional_exposure(dec_array, theta_max, pao_lat)
+    integrated_exposure = 2*np.pi*np.trapz(exposure_array*np.cos(dec_array), x = dec_array)
+
+    target_area = 2*np.pi*(1 - np.cos(target_radius))
+    exposure_at_flare = compute_directional_exposure([dec_flare], theta_max, pao_lat) / integrated_exposure
+
+    mu_at_flare = n_events*exposure_at_flare*target_area
+    mu_at_flare = mu_at_flare[0]
+
+    return mu_at_flare
+
 #define a function to get a list of files from a path and a pattern
 def get_filelist(input_path, pattern):
 
@@ -158,12 +177,72 @@ def get_lambda_performance(pvalues_flares):
 
     return performance_factor_lambda, performance_factor_lambda_corr
 
+#get pos-trial p-values
+def compute_postrial_pvalues(pvalues_flares, pvalues_iso, estimator_type):
+
+    start = datetime.now()
+
+    #set up dictionary to convert estimator name into an index
+    estimator_dic = {'poisson' : 0, 'lambda' : 1, 'corrected_lambda' : 2}
+
+    try:
+        index = estimator_dic[estimator_type]
+    except KeyError:
+        print('Requested estimator name: (%s) does not exist in available keys' % estimator_type, list(estimator_dic.keys()))
+        exit()
+
+    #save the values of pvalues for easier manipulation
+    pvalues_flare = pvalues_flares[:,:,index,:]
+    pvalues_iso = pvalues_iso[:,:,index,:]
+
+    postrial_pvalues = np.array([ np.sum(pvalues_iso[i, j] < pvalues_flare[i, j, :, np.newaxis], axis = 1) for i in range(pvalues_flare.shape[0]) for j in range(pvalues_flare.shape[1]) ])
+    postrial_pvalues = np.reshape(postrial_pvalues, pvalues_iso.shape) / pvalues_iso.shape[2]
+
+    #set to 1/n_samples null postrial pvalues
+    min_pvalue = 1 / postrial_pvalues.shape[2]
+
+    postrial_pvalues = ma.masked_array(postrial_pvalues, mask = (postrial_pvalues == 0)).filled(fill_value = min_pvalue)
+
+    print('Computing postrial pvalues took', datetime.now() - start, 's')
+
+    return postrial_pvalues
+
+#define a function to define the style of a color bar
+def create_colorbar(fig, ax, heatmap, colormap, title, limits, label_size):
+
+    cb = fig.colorbar(heatmap, cmap = colormap, ax = ax)
+
+    cb.ax.set_ylabel(title, fontsize=label_size)
+    cb.ax.set_ylim(limits[0], limits[1])
+    cb.ax.tick_params(labelsize=label_size)
+
+#create the axis with intuitive duration for the flares
+def create_intuitive_duration_axis(ax, ticks_array, labels_array):
+
+    ax_new = ax.twiny()
+
+    ax_new.set_xlim(ax.get_xlim())
+    ax_new.set_xticks(ticks_array)
+    ax_new.set_xticklabels(labels_array)
+
 if __name__ == '__main__':
 
     #define a few constants
     time_begin = Time('2010-01-01T00:00:00', format = 'fits', scale = 'utc').gps
     time_end = Time('2020-01-01T00:00:00', format = 'fits', scale = 'utc').gps
     obs_time = time_end - time_begin
+    obs_time_years = obs_time / (366*86_164)
+
+    ra_flare = np.radians(0)
+    dec_flare = np.radians(-30)
+
+    n_events = 100_000
+
+    #set position of the pierre auger observatory
+    pao_lat = np.radians(-35.15) # this is the average latitude
+
+    #define the maximum zenith angle
+    theta_max = np.radians(80)
 
     #define the input directory
     input_path = './datasets/flare_lattice_study'
@@ -195,99 +274,126 @@ if __name__ == '__main__':
     with open(filelist_flare_info[0], 'rb') as file:
         flare_intensity, flare_duration = pickle.load(file)
 
+    #save the size of the target around flare
+    target_radius = np.radians(float(os.path.basename(filelist_flare_info[0])[46:49]))
+
+    #compute the expected number of events in flare target
+    mu_at_flare = get_mu_around_flare(ra_flare, dec_flare, target_radius, theta_max, pao_lat, n_events)
+
     #transform flare duration into a more meaningful quantity
     flare_duration = np.log10(flare_duration / obs_time)
 
     #get the merged distributions of pvalues and estimators
     estimators_flares = merge_samples(filelist_flare_estimator)
+    estimators_iso = merge_samples(filelist_iso_estimator)
+
     pvalues_flares = merge_samples(filelist_flare_pvalues)
+    pvalues_iso = merge_samples(filelist_iso_pvalues)
 
     #get the number of samples for each pvalue with lambda is smaller than with poisson
     performance_factor_lambda, performance_factor_lambda_corr = get_lambda_performance(pvalues_flares)
+    benchmark_performance_lambda, benchmark_performance_lambda_corr = get_lambda_performance(pvalues_iso)
+
+    #print(benchmark_performance_lambda)
+
+    #compute postrial pvalues
+    postrial_pvalues_poisson = compute_postrial_pvalues(pvalues_flares, pvalues_iso, 'poisson')
+    postrial_pvalues_lambda = compute_postrial_pvalues(pvalues_flares, pvalues_iso, 'lambda')
+
+    #compute the fraction of postrial pvalues less than 10^(-2)
+    pvalue_threshold = -2
+    postrial_pvalues_poisson_below_threshold = 100*(np.sum(np.log10(postrial_pvalues_poisson) < pvalue_threshold, axis = 2) / postrial_pvalues_poisson.shape[2])
+    postrial_pvalues_lambda_below_threshold = 100*(np.sum(np.log10(postrial_pvalues_lambda) < pvalue_threshold, axis = 2) / postrial_pvalues_lambda.shape[2])
+
+    #print(postrial_pvalues_poisson_below_001)
 
     #save colormap
     colormap = plt.get_cmap('RdBu_r')
+    colormap_postrial_pv = plt.get_cmap('magma')
 
     #----------------------------
     # Plotting
     #----------------------------
-    #initialize figure and axis
+    #initialize figure
     fig_lambda_performance_against_poisson = plt.figure(figsize=(10, 4))
+    fig_postrial_pvalues = plt.figure(figsize=(15, 4))
 
+    postrial_pv_title = r'$\mu = %.2f$ events, $T_{\mathrm{obs}} = %.0f$ years' % (mu_at_flare, obs_time_years)
+    fig_postrial_pvalues.suptitle(postrial_pv_title, fontsize = 12)
+
+    #initialize axis
     ax_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 2, 1)
     ax_corrected_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 2, 2)
 
-    #ax_lambda_performance = plt.subplot2grid((2, 4), (0, 0), colspan=2, rowspan=2, fig=fig_lambda_performance_against_poisson)
-    #ax_lambda_dist_1day = plt.subplot2grid((2, 4), (0, 2), colspan=1, rowspan=1, fig=fig_lambda_performance)
-    #ax_lambda_dist_1month = plt.subplot2grid((2, 4), (0, 3), colspan=1, rowspan=1, fig=fig_lambda_performance)
-    #ax_lambda_pvalue_dist_1day = plt.subplot2grid((2, 4), (1, 2), colspan=1, rowspan=1, fig=fig_lambda_performance)
-    #ax_lambda_pvalue_dist_1month = plt.subplot2grid((2, 4), (1, 3), colspan=1, rowspan=1, fig=fig_lambda_performance)
+    ax_postrial_pvalues_poisson = fig_postrial_pvalues.add_subplot(1, 3, 1)
+    ax_postrial_pvalues_lambda = fig_postrial_pvalues.add_subplot(1, 3, 2)
+    ax_postrial_pvalues_lambda_corr = fig_postrial_pvalues.add_subplot(1, 3, 3)
 
-    #compute lambda distributions for different flare intensities and times
-    duration_1day = 86_164
-    duration_1month = 30*86_164
-
-    # lambda_bins = 100
-    # lambda_pv_bins = 50
-    # lambda_lower = lambda_dist_bin_centers[0]
-    # lambda_upper = lambda_dist_bin_centers[-1]
-    #to plot countour curves to assess lambda performance against the simple number of events
-
-    #events_per_flare_grid, flare_duration_grid = np.meshgrid(events_per_flare_array, np.log10(flare_duration_array / obs_time))
-
-    #print(events_per_flare_grid[0,:])
-    #print(flare_duration_grid[:,0])
-    #lower_contours = np.arange(-4.25, np.log10(1 - poisson_pvalue), .25)
-    #upper_contours = np.linspace(np.log10(1 - poisson_pvalue), 0, 5) #, 0)
-    #contour_levels = np.concatenate((lower_contours, upper_contours))
-
-    #compute the limits of the lambda performance
-    lambda_performance_lower = 0 #-np.log10(pvalues_flares.shape[3])
+    #compute the limits of the lambda performance and for the postrial pvalues
+    lambda_performance_lower = 0
     lambda_performance_upper = 100
     lambda_performance_contour_levels = np.append(np.arange(lambda_performance_lower, lambda_performance_upper, 5), lambda_performance_upper)
 
+    postrial_pvalues_lower = 0
+    postrial_pvalues_upper = 100
+    postrial_pvalues_contours = np.append(np.arange(postrial_pvalues_lower, postrial_pvalues_upper, 5), postrial_pvalues_upper)
+
+    #plot the contours of the lambda perfomance and of postrial pvalues
     contour_lambda_performance = ax_lambda_performance.contourf(flare_duration, flare_intensity, np.transpose(performance_factor_lambda), levels = lambda_performance_contour_levels, cmap = colormap) #norm = mcolors.TwoSlopeNorm(vmin = contour_levels[0], vcenter = np.log10(1 - poisson_pvalue), vmax =contour_levels[-1]))
     contour_corrected_lambda_performance = ax_corrected_lambda_performance.contourf(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = lambda_performance_contour_levels, cmap = colormap)
 
-    #plot the contour corresponding to 0
-    poisson_contour_lambda_performance = ax_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda), levels = [50], colors = 'black', linestyles = 'dashed', linewidths = 1)
+    contour_postrial_pvalues_poisson = ax_postrial_pvalues_poisson.contourf(flare_duration, flare_intensity, np.transpose(postrial_pvalues_poisson_below_threshold), levels = postrial_pvalues_contours, cmap = colormap_postrial_pv)
+    contour_postrial_pvalues_lambda = ax_postrial_pvalues_lambda.contourf(flare_duration, flare_intensity, np.transpose(postrial_pvalues_lambda_below_threshold), levels = postrial_pvalues_contours, cmap = colormap_postrial_pv)
+
+    #plot the contour corresponding to equal performance for lambda performance
+    equal_performance_contour_lambda = ax_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda), levels = [benchmark_performance_lambda[0, 0]], colors = 'black', linestyles = 'dashed', linewidths = 1)
+    equal_performance_contour_lambda_corr = ax_corrected_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = [benchmark_performance_lambda_corr[0, 0]], colors = 'black', linestyles = 'dashed', linewidths = 1)
 
     #define the style of the axis
-    #ax_lambda_performance = set_style(ax_lambda_performance, r'$\mu = %.0f$ events, $N_{\mathrm{events}} = %.0f$, $T_{\mathrm{obs}} = 10$ years' % (exp_nEvents, iso_nEvents), r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$', r'$n_{\mathrm{events}}$', 12)
-    #ax_lambda_performance = print_heatmap_bin_content(ax_lambda_performance, flare_duration_grid[:,0], events_per_flare_grid[0,:], np.transpose(frac_lambdaPvalues_below_poissonPvalue), 10)
+    lambda_performance_title = r'$\mu = %.2f$ events, $T_{\mathrm{obs}} = %.0f$ years' % (mu_at_flare, obs_time_years)
+    lambda_performance_xlabel = r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$'
+    lambda_performance_ylabel = r'$n_{\mathrm{events}}$'
+
+    postrial_pv_xlabel = r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$'
+    postrial_pv_ylabel = r'$n_{\mathrm{events}}$'
+
+    ax_lambda_performance = set_style(ax_lambda_performance, lambda_performance_title, lambda_performance_xlabel, lambda_performance_ylabel, 12)
+    ax_corrected_lambda_performance = set_style(ax_corrected_lambda_performance, lambda_performance_title, lambda_performance_xlabel, lambda_performance_ylabel, 12)
+
+    ax_postrial_pvalues_poisson = set_style(ax_postrial_pvalues_poisson, 'Poisson', postrial_pv_xlabel, postrial_pv_ylabel, 12)
+    ax_postrial_pvalues_lambda = set_style(ax_postrial_pvalues_lambda, r'$\Lambda$', postrial_pv_xlabel, postrial_pv_ylabel, 12)
 
     #create and define style of color bar
-    cb_lambda_performance = fig_lambda_performance_against_poisson.colorbar(contour_lambda_performance, ax=ax_lambda_performance)
-    cb_lambda_performance = set_cb_style(cb_lambda_performance, r'$\log_{10} \left( 1 - \displaystyle \frac{n_{\Lambda}}{n_{\mathrm{samples}}} \right)$', [lambda_performance_lower, lambda_performance_upper], 12)
+    cb_title_lambda_performance = r'frac. of samples with $p_{\Lambda} \leq p_{n} \,(\%)$'
+    cb_title_postrial_pv = r'frac. of samples with $p^* \leq 10^{-2} \,(\%)$'
 
-    #labeled_contour_levels = np.linspace(-4, 0, 5)
-    #cb_lambda_performance.set_ticks(labeled_contour_levels)
-    #cb_lambda_performance.set_ticklabels(['%.1f' % label for label in labeled_contour_levels], fontsize = 12)
+    create_colorbar(fig_lambda_performance_against_poisson, ax_lambda_performance, contour_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
+    create_colorbar(fig_lambda_performance_against_poisson, ax_corrected_lambda_performance, contour_corrected_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
 
-    #cb_lambda_performance.ax.hlines(np.log10(1 - poisson_pvalue), 0, 1, color = 'black', linestyle = 'solid')
-    #ax_lambda_performance.clabel(poisson_contour_lambda_performance, fontsize = 12, fmt='%.0f \%%')
+    create_colorbar(fig_postrial_pvalues, ax_postrial_pvalues_poisson, contour_postrial_pvalues_poisson, colormap_postrial_pv, cb_title_postrial_pv, [postrial_pvalues_lower, postrial_pvalues_upper], 12)
+    create_colorbar(fig_postrial_pvalues, ax_postrial_pvalues_lambda, contour_postrial_pvalues_lambda, colormap_postrial_pv, cb_title_postrial_pv, [postrial_pvalues_lower, postrial_pvalues_upper], 12)
 
     #plot axis with intuitive time scales
     intuitive_duration_array = np.log10(np.array([1, 7, 30, 366]) * 86_164 / obs_time) # in seconds
     intuitive_duration_array_label = ['1 day', '1 week', '1 month', '1 year']
 
-    ax_intuitive_duration = ax_lambda_performance.twiny()
-
-    ax_intuitive_duration.set_xlim(ax_lambda_performance.get_xlim())
-    ax_intuitive_duration.set_xticks(intuitive_duration_array)
-    ax_intuitive_duration.set_xticklabels(intuitive_duration_array_label)
+    create_intuitive_duration_axis(ax_lambda_performance, intuitive_duration_array, intuitive_duration_array_label)
+    create_intuitive_duration_axis(ax_corrected_lambda_performance, intuitive_duration_array, intuitive_duration_array_label)
+    create_intuitive_duration_axis(ax_postrial_pvalues_poisson, intuitive_duration_array, intuitive_duration_array_label)
+    create_intuitive_duration_axis(ax_postrial_pvalues_lambda, intuitive_duration_array, intuitive_duration_array_label)
 
     #plot vertical lines with the intuitive time scales
-    ax_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .5, linestyle = 'dashed')
+    ax_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
+    ax_corrected_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
 
-    #plot legend
-    #legend_handles = [Line2D([0], [0], color=color_list[j], linewidth=1, label=f'$n = {flare_intensity}$') for j, flare_intensity in enumerate(events_per_flare_array[::2])]
-    #legend_labels = [r'$n = %i$' % flare_intensity for flare_intensity in events_per_flare_array[::2]]
-
-    #fig_lambda_performance.legend(handles = legend_handles, labels = legend_labels, fontsize = 12, loc = 'upper center', ncols = 5, columnspacing = 1., handlelength = 1., handletextpad = .5, bbox_to_anchor=(0.75, 1), frameon = False)
+    ax_postrial_pvalues_poisson.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
+    ax_postrial_pvalues_lambda.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
 
     fig_lambda_performance_against_poisson.tight_layout()
-    fig_lambda_performance_against_poisson.savefig(os.path.join(output_path, 'LambdaPValues_below_poissonPvalue.pdf'))
+    fig_postrial_pvalues.tight_layout()
+
+    fig_lambda_performance_against_poisson.savefig(os.path.join(output_path, 'LambdaPValues_below_poissonPValue_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))
+    fig_postrial_pvalues.savefig(os.path.join(output_path, 'postrialPValues_below_threshold_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))
 
     # color_list = color_map(np.linspace(0.2, .9, len(events_per_flare_array[::2])))
     #
