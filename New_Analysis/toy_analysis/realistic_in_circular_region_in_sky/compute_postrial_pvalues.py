@@ -34,7 +34,7 @@ def get_filelist(input_path, pattern):
 
             filelist.append(filename)
 
-    return filelist
+    return np.array(filelist)
 
 #function to fetch to sum the lattices of either estimators or pvalues
 def merge_samples(filelist):

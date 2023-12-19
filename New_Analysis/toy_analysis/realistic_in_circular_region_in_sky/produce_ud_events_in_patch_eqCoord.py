@@ -62,9 +62,6 @@ def compute_ra(u, dec_center, ra_center, max_ra_width, patch_radius, dec):
     ra_right = get_principal_argument(ra_center + delta_ra)
     ra_left = get_principal_argument(ra_center - delta_ra)
 
-    #print(ra_right)
-    #print()
-    #define as nan the values of ra outside of path
     in_patch = np.logical_or(ra > ra_left, ra < ra_right)
 
     ra = ma.masked_array(ra, mask = np.logical_not(in_patch)).filled(fill_value = np.nan)

@@ -139,23 +139,28 @@ def get_normalized_exposure_map(NSIDE, theta_max, earth_lat):
     #indices of sky
     all_indices = np.arange(npix)
 
-    #initialize map
-    exposure_map = np.zeros(npix)
-
     #get angles at center of each pixel
     colat, ra = hp.pix2ang(NSIDE, all_indices)
 
+    #compute a unique vector of colat values
+    colat_unique = np.unique(colat)
+
     #compute exposure for each pixel
+    exposure_per_dec = compute_directional_exposure(colat_to_dec(colat_unique), theta_max, earth_lat)
     exposure_per_bin = compute_directional_exposure(colat_to_dec(colat), theta_max, earth_lat)
 
     #integrate exposure
-    integrated_exposure = 2*np.pi*np.trapz(exposure_per_bin*np.sin(colat), x=colat)
+    integrated_exposure = 2*np.pi*np.trapz(exposure_per_dec*np.sin(colat_unique), x=colat_unique)
+
+    #print(integrated_exposure)
 
     #normalize exposure
-    exposure_per_bin = exposure_per_bin / integrated_exposure
+    exposure_map = exposure_per_bin / integrated_exposure
+
+
 
     #add to map
-    np.add.at(exposure_map, all_indices, exposure_per_bin)
+    #np.add.at(exposure_map, all_indices, exposure_per_bin)
 
     return exposure_map
 

@@ -36,77 +36,6 @@ plt.rcParams.update({
     'font.family' : 'serif'
 })
 
-#compute n_samples of n_events distributed uniformly in time
-# def get_time_stamps(n_samples, n_events, obs_time):
-#
-#     #compute matrix of events times
-#     event_time = np.random.randint(0, obs_time, size = (n_samples, n_events))
-#
-#     return event_time
-#
-# #compute times of events from flare
-# def get_flare_time_stamps(n_samples, n_events, flare_start, flare_duration):
-#
-#     #compute matrix of events times
-#     event_time = np.random.randint(flare_start, flare_start + flare_duration, size = (n_samples, n_events))
-#
-#     return event_time
-#
-# #compute array given a matrix of time stamps
-# def compute_lambda(event_time, exp_rate):
-#
-#     #compute lambda
-#     event_time = np.sort(event_time, axis = 1)
-#     time_diff = np.diff(event_time, axis = 1)*exp_rate
-#
-#     lambda_array = -np.sum(np.log(time_diff), axis = 1)
-#
-#     return lambda_array
-#
-# #computes p_values for the lambda_array
-# def get_lambda_pvalues(lambda_array, lambda_dist, fit_initial, tail_slope, fit_scale):
-#
-#     #initialize p_value array
-#     lambda_pvalues = np.zeros(len(lambda_array))
-#
-#     #saves the lambda_bin_centers and bin_contents
-#     lambda_bin_centers = np.array(lambda_dist[0])
-#     lambda_bin_content = np.array(lambda_dist[1])
-#
-#     #compute the discrete cdf of lambda and interpolate it
-#     below_fit_init = lambda_bin_centers <= fit_initial
-#     lambda_bins = lambda_bin_centers[below_fit_init]
-#     discrete_cdf_lambda = np.cumsum(lambda_bin_content[below_fit_init]) / np.sum(lambda_bin_content)
-#
-#     interpolated_cdf_lambda = akima_spline(lambda_bins, discrete_cdf_lambda)
-#
-#     #if lambda_value is below initial point the p_value used the interpolated discrete cdf
-#     lambda_below_fit_init = lambda_array < fit_initial
-#     lambda_pvalues[lambda_below_fit_init] = 1 - interpolated_cdf_lambda(lambda_array[lambda_below_fit_init])
-#
-#     #if lambda_value is above initial point the p_value is analytical
-#     lambda_above_fit_init = lambda_array >= fit_initial
-#
-#     #print(np.exp(-tail_slope*lambda_array[lambda_above_fit_init]))
-#     #const = (fit_scale / tail_slope)*np.exp(-tail_slope*fit_initial)
-#     lambda_pvalues[lambda_above_fit_init] = (1 - discrete_cdf_lambda[-1])*np.exp(-tail_slope*(lambda_array[lambda_above_fit_init] - fit_initial)) # - fit_initial))
-#
-#     #print('Discrete p_value:', np.log10(1 - discrete_cdf_lambda[-1]))
-#     #print('Interpolated p_value:', np.log10(1 - interpolated_cdf_lambda(fit_initial)))
-#     #print('Fitted p_value', np.log10(np.exp(-tail_slope*fit_initial)) )
-#
-#     return lambda_pvalues
-#
-# #function to print the content of each bin in 2d histogram
-# def print_heatmap_bin_content(ax, x_bins, y_bins, bin_content, fontsize):
-#
-#     for i, x_pos in enumerate(x_bins):
-#
-#         for j, y_pos in enumerate(y_bins):
-#
-#             ax.text(x_pos, y_pos, r'$%.1f$' % bin_content[i, j], ha="center", va="center", fontsize = fontsize)
-#
-#     return ax
 
 def get_mu_around_flare(ra_flare, dec_flare, target_radius, theta_max, pao_lat, n_events):
 
@@ -176,36 +105,6 @@ def get_lambda_performance(pvalues_flares):
     performance_factor_lambda_corr = 100*frac_lambda_corr #np.log10(1 - frac_lambda_corr)
 
     return performance_factor_lambda, performance_factor_lambda_corr
-
-#get pos-trial p-values
-def compute_postrial_pvalues(pvalues_flares, pvalues_iso, estimator_type):
-
-    start = datetime.now()
-
-    #set up dictionary to convert estimator name into an index
-    estimator_dic = {'poisson' : 0, 'lambda' : 1, 'corrected_lambda' : 2}
-
-    try:
-        index = estimator_dic[estimator_type]
-    except KeyError:
-        print('Requested estimator name: (%s) does not exist in available keys' % estimator_type, list(estimator_dic.keys()))
-        exit()
-
-    #save the values of pvalues for easier manipulation
-    pvalues_flare = pvalues_flares[:,:,index,:]
-    pvalues_iso = pvalues_iso[:,:,index,:]
-
-    postrial_pvalues = np.array([ np.sum(pvalues_iso[i, j] < pvalues_flare[i, j, :, np.newaxis], axis = 1) for i in range(pvalues_flare.shape[0]) for j in range(pvalues_flare.shape[1]) ])
-    postrial_pvalues = np.reshape(postrial_pvalues, pvalues_iso.shape) / pvalues_iso.shape[2]
-
-    #set to 1/n_samples null postrial pvalues
-    min_pvalue = 1 / postrial_pvalues.shape[2]
-
-    postrial_pvalues = ma.masked_array(postrial_pvalues, mask = (postrial_pvalues == 0)).filled(fill_value = min_pvalue)
-
-    print('Computing postrial pvalues took', datetime.now() - start, 's')
-
-    return postrial_pvalues
 
 #define a function to define the style of a color bar
 def create_colorbar(fig, ax, heatmap, colormap, title, limits, label_size):
@@ -328,7 +227,7 @@ if __name__ == '__main__':
     colormap_postrial_pv = plt.get_cmap('magma')
 
     #----------------------------
-    # Plotting
+    # Plotting performance of estimators
     #----------------------------
 
     #initialize figure

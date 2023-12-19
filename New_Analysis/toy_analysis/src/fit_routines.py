@@ -2,7 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.optimize import curve_fit
+from scipy.optimize import minimize
 from scipy.special import erfc
+
+from scipy.stats import poisson
 
 #defines the fit function
 def fit_expGauss(x, norm, mean, sigma, slope):
@@ -100,10 +103,6 @@ def perform_fit_exp(bin_centers, bin_content, bin_error, initial_point, tol):
     bin_content = np.array(bin_content)
     bin_error = np.array(bin_error)
 
-    #print(bin_centers)
-    #print(bin_content)
-    #print(bin_error)
-
     #if all bin contents are 0, then skip
     if np.all(bin_content == 0):
 
@@ -135,23 +134,6 @@ def perform_fit_exp(bin_centers, bin_content, bin_error, initial_point, tol):
             fit_bin_centers = bin_centers[above_lower_lim]
             fit_bin_content = bin_content[above_lower_lim]
             fit_bin_error = bin_error[above_lower_lim]
-
-            #only consider bins such that there are no gaps in the bin centers
-            #no_gaps = np.diff(fit_bin_centers) == bin_width
-
-            #fit_bin_centers = bin_centers[no_gaps]
-            #fit_bin_content = bin_content[no_gaps]
-            #fit_bin_error = bin_error[no_gaps]
-
-            #remove outliers
-            #if np.any(np.diff(fit_bin_centers)) > bin_width):
-
-                #fit_bin_centers = fit_bin_centers[:-1]
-                #fit_bin_content = fit_bin_content[:-1]
-                #fit_bin_error = fit_bin_error[:-1]
-
-                #print('removed outlier bin_centers', fit_bin_centers)
-                #print('removed outlier bin_content', fit_bin_content)
 
             #initial guess for parameters
             slope = np.log(max(fit_bin_content) / fit_bin_content[-1]) / (fit_bin_centers[-1] - fit_bin_centers[bin_content.argmax()])
@@ -216,3 +198,102 @@ def perform_fit_modified_gumble(bin_centers, bin_content, bin_error, params_init
     chi2 = sum(np.power(y_exp - bin_content, 2) / np.power(bin_error, 2)) / ndf
 
     return popt, perr, x, y, chi2
+
+#define the poisson likelihood for a likelihood fit
+def poisson_log_likelihood(fit_parameters, bin_centers, bin_content):
+
+    #save the fit parameters
+    norm = fit_parameters[0]
+    slope = fit_paramerers[1]
+
+    #compute the predicted bin content
+    prediction = exp_fit(bin_centers, norm, slope)
+
+    return - np.sum(np.log(poisson.pmf(bin_content, prediction)))
+
+#define the likelihood fit procedure
+def perform_likelihood_fit_exp(bin_centers, bin_content, bin_error, initial_point, tol):
+
+    #convert lists to arrays
+    bin_centers = np.array(bin_centers)
+    bin_content = np.array(bin_content)
+    bin_error = np.array(bin_error)
+
+    #if all bin contents are 0, then skip
+    if np.all(bin_content == 0):
+
+        print('Fit cannot be performed. All bins are empty!')
+        return np.full(5, np.nan)
+
+    else:
+
+        #restrict bins to be above the initial point
+        above_initial_point = bin_centers > initial_point
+
+        bin_centers = bin_centers[above_initial_point]
+        bin_content = bin_content[above_initial_point]
+        bin_error = bin_error[above_initial_point]
+
+        #bin_content = bin_content[np.where(bin_centers > initial_point)[0]]
+        #bin_error = bin_error[np.where(bin_centers > initial_point)[0]]
+        #bin_centers = bin_centers[np.where(bin_centers > initial_point)[0]]
+
+        #restrict bin contents to non-zero values
+        #bin_centers = bin_centers[np.where(bin_content > 0)[0]]
+        #bin_error = bin_error[np.where(bin_content > 0)[0]]
+        #bin_content = bin_content[np.where(bin_content > 0)[0]]
+
+        #get bin width
+        #bin_width = bin_centers[1] - bin_centers[0]
+
+        for lower_limit in bin_centers:
+
+            #above lower_limit
+            above_lower_lim = bin_centers > lower_limit
+
+            fit_bin_centers = bin_centers[above_lower_lim]
+            fit_bin_content = bin_content[above_lower_lim]
+            fit_bin_error = bin_error[above_lower_lim]
+
+            #initial guess for parameters
+            slope = np.log(max(fit_bin_content) / fit_bin_content[-1]) / (fit_bin_centers[-1] - fit_bin_centers[bin_content.argmax()])
+            norm = fit_bin_content[0]*np.exp(slope*fit_bin_centers[1])
+
+            params_init = [norm, slope]
+            params_bounds = [(0, 10*norm), (0, 1)]
+
+            minimized_likelihood = minimize(poisson_log_likelihood, args=(bin_centers, bin_content), x0 = params_init, bounds = params_bounds)
+
+            #save the fit parameters
+            popt = minimized_likelihood.x
+            perr = np.full(popt.shape, np.nan)
+
+            #bounds for parameters
+            #lower_bounds = [0, 0]
+            #upper_bounds = [10*norm, 2*slope]
+
+            #print('removed outlier bin_centers', fit_bin_centers[-10:])
+            #print('removed outlier bin_content', fit_bin_content[-10:])
+
+            #perform fit
+            #popt, pcov = curve_fit(exp_fit, fit_bin_centers, fit_bin_content, p0=params_init, bounds=(lower_bounds, upper_bounds), sigma=fit_bin_error)
+
+            #errors of parameters
+            #perr = np.sqrt(np.diag(pcov))
+
+            #produce arrays to plot the fit function
+            x = np.linspace(min(fit_bin_centers), max(fit_bin_centers), 5000)
+            y = exp_fit(x, *popt)
+
+            #compute chi2 for the bins
+            is_positive = fit_bin_content > 0
+
+            ndf = len(fit_bin_content[is_positive]) - len(popt)
+            y_exp = np.array(exp_fit(fit_bin_centers[is_positive], *popt))
+            chi2 = np.sum(np.power(y_exp[is_positive] - fit_bin_content[is_positive], 2) / np.power(fit_bin_error[is_positive], 2)) / ndf
+
+            if chi2 < tol:
+                print('Likelihood fit converged!')
+                break
+
+                return [popt, perr, x, y, chi2]
