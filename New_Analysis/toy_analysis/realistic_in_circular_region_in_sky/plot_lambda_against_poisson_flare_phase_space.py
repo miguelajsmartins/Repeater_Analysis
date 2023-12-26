@@ -11,6 +11,7 @@ from scipy.interpolate import Akima1DInterpolator as akima_spline
 #for plotting
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 from matplotlib.lines import Line2D
 
 from astropy.time import Time
@@ -36,7 +37,7 @@ plt.rcParams.update({
     'font.family' : 'serif'
 })
 
-
+#get the average number of events in the place around the flare
 def get_mu_around_flare(ra_flare, dec_flare, target_radius, theta_max, pao_lat, n_events):
 
     #compute the expected number of events in the position of the flare
@@ -90,21 +91,21 @@ def get_lambda_performance(pvalues_flares):
 
     #compute the difference between pvalues with poisson and lambda
     pvalue_diff = pvalues_flares[:,:,1,:] - pvalues_flares[:,:,0,:]
-    pvalue_diff_corr_lambda = pvalues_flares[:,:,2,:] - pvalues_flares[:,:,0,:]
+    #pvalue_diff_corr_lambda = pvalues_flares[:,:,2,:] - pvalues_flares[:,:,0,:]
 
     #counts the number of elements that are negative
     negative_values = np.sum(pvalue_diff < 0, axis = 2)
-    negative_values_corr_lambda = np.sum(pvalue_diff_corr_lambda < 0, axis = 2)
+    #negative_values_corr_lambda = np.sum(pvalue_diff_corr_lambda < 0, axis = 2)
 
     #transform these values into a fraction
     frac_lambda = negative_values / pvalues_flares.shape[3]
-    frac_lambda_corr = negative_values_corr_lambda / pvalues_flares.shape[3]
+    #frac_lambda_corr = negative_values_corr_lambda / pvalues_flares.shape[3]
 
     #transform this fraction into a more meaningful number
     performance_factor_lambda = 100*frac_lambda #np.log10(1 - frac_lambda)
-    performance_factor_lambda_corr = 100*frac_lambda_corr #np.log10(1 - frac_lambda_corr)
+    #performance_factor_lambda_corr = 100*frac_lambda_corr #np.log10(1 - frac_lambda_corr)
 
-    return performance_factor_lambda, performance_factor_lambda_corr
+    return performance_factor_lambda #, performance_factor_lambda_corr
 
 #define a function to define the style of a color bar
 def create_colorbar(fig, ax, heatmap, colormap, title, limits, label_size):
@@ -123,6 +124,26 @@ def create_intuitive_duration_axis(ax, ticks_array, labels_array):
     ax_new.set_xlim(ax.get_xlim())
     ax_new.set_xticks(ticks_array)
     ax_new.set_xticklabels(labels_array)
+
+#creates and normalizes distribution
+def get_normalized_pdf(quantity_array, bin_array):
+
+    #save the limits and size
+    lower_limit = bin_array[0]
+    upper_limit = bin_array[-1]
+    size = quantity_array.shape
+
+    #get the distribution
+    bin_centers, bin_content, bin_error = data_2_binned_errorbar(quantity_array, bin_array, lower_limit, upper_limit, np.ones(size), False)
+
+    #compute the integral
+    integral = np.trapz(bin_content, x = bin_centers)
+
+    #normalize distribution
+    bin_content = bin_content / integral
+    bin_error = bin_error / integral
+
+    return bin_centers, bin_content, bin_error
 
 if __name__ == '__main__':
 
@@ -196,15 +217,17 @@ if __name__ == '__main__':
     pvalues_flares = merge_samples(filelist_flare_pvalues)
     pvalues_iso = merge_samples(filelist_iso_pvalues)
 
-    #get the number of samples for each pvalue with lambda is smaller than with poisson
-    performance_factor_lambda, performance_factor_lambda_corr = get_lambda_performance(pvalues_flares)
-    benchmark_performance_lambda, benchmark_performance_lambda_corr = get_lambda_performance(pvalues_iso)
-
     #print(benchmark_performance_lambda)
 
     #get the postrial pvalues
     with open(file_postrial_pvalues, 'rb') as file:
         postrial_pvalues = pickle.load(file)
+
+    #get the number of samples for each pvalue with lambda is smaller than with poisson
+    #performance_factor_lambda, performance_factor_lambda_corr = get_lambda_performance(postrial_pvalues)
+    #benchmark_performance_lambda, benchmark_performance_lambda_corr = get_lambda_performance(pvalues_iso)
+    performance_factor_lambda = get_lambda_performance(postrial_pvalues)
+    benchmark_performance_lambda = get_lambda_performance(pvalues_iso)
 
     postrial_pvalues_poisson = postrial_pvalues[:,:,0,:]
     postrial_pvalues_lambda = postrial_pvalues[:,:,1,:]
@@ -215,7 +238,7 @@ if __name__ == '__main__':
     postrial_pvalues_lambda_below_threshold = 100*(np.sum(np.log10(postrial_pvalues_lambda) < pvalue_threshold, axis = 2) / postrial_pvalues_lambda.shape[2])
 
     #compute the 5 % quantile of the distribution of pos trial pvalues
-    quantile = .05
+    quantile = .10
     quantile_postrial_pvalues_poisson = np.log10(np.quantile(postrial_pvalues_poisson, quantile, axis = 2))
     quantile_postrial_pvalues_lambda = np.log10(np.quantile(postrial_pvalues_lambda, quantile, axis = 2))
 
@@ -227,11 +250,10 @@ if __name__ == '__main__':
     colormap_postrial_pv = plt.get_cmap('magma')
 
     #----------------------------
-    # Plotting performance of estimators
+    # Plot performance of estimators
     #----------------------------
-
     #initialize figure
-    fig_lambda_performance_against_poisson = plt.figure(figsize=(10, 4))
+    fig_lambda_performance_against_poisson = plt.figure(figsize=(5, 4))
     fig_postrial_pvalues = plt.figure(figsize=(10, 4))
     fig_postrial_pvs_quantile = plt.figure(figsize=(10, 4))
 
@@ -241,8 +263,8 @@ if __name__ == '__main__':
     fig_postrial_pvs_quantile.suptitle(postrial_pv_title, fontsize = 12)
 
     #initialize axis
-    ax_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 2, 1)
-    ax_corrected_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 2, 2)
+    ax_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 1, 1)
+    #ax_corrected_lambda_performance = fig_lambda_performance_against_poisson.add_subplot(1, 2, 2)
 
     ax_postrial_pvalues_poisson = fig_postrial_pvalues.add_subplot(1, 2, 1)
     ax_postrial_pvalues_lambda = fig_postrial_pvalues.add_subplot(1, 2, 2)
@@ -256,8 +278,8 @@ if __name__ == '__main__':
     lambda_performance_contour_levels = np.append(np.arange(lambda_performance_lower, lambda_performance_upper, 5), lambda_performance_upper)
 
     postrial_pvalues_lower = 0
-    postrial_pvalues_upper = 100
-    postrial_pvalues_contours = np.append(np.arange(postrial_pvalues_lower, postrial_pvalues_upper, 5), postrial_pvalues_upper)
+    postrial_pvalues_upper = np.max(postrial_pvalues_lambda_below_threshold)
+    postrial_pvalues_contours = np.append(np.arange(postrial_pvalues_lower, postrial_pvalues_upper, 1), postrial_pvalues_upper)
 
     quantile_postrial_pvs_lower = -np.log10(postrial_pvalues.shape[3])
     quantile_postrial_pvs_upper = 0
@@ -265,7 +287,7 @@ if __name__ == '__main__':
 
     #plot the contours of the lambda perfomance and of postrial pvalues
     contour_lambda_performance = ax_lambda_performance.contourf(flare_duration, flare_intensity, np.transpose(performance_factor_lambda), levels = lambda_performance_contour_levels, cmap = colormap) #norm = mcolors.TwoSlopeNorm(vmin = contour_levels[0], vcenter = np.log10(1 - poisson_pvalue), vmax =contour_levels[-1]))
-    contour_corrected_lambda_performance = ax_corrected_lambda_performance.contourf(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = lambda_performance_contour_levels, cmap = colormap)
+    #contour_corrected_lambda_performance = ax_corrected_lambda_performance.contourf(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = lambda_performance_contour_levels, cmap = colormap)
 
     contour_postrial_pvalues_poisson = ax_postrial_pvalues_poisson.contourf(flare_duration, flare_intensity, np.transpose(postrial_pvalues_poisson_below_threshold), levels = postrial_pvalues_contours, cmap = colormap_postrial_pv)
     contour_postrial_pvalues_lambda = ax_postrial_pvalues_lambda.contourf(flare_duration, flare_intensity, np.transpose(postrial_pvalues_lambda_below_threshold), levels = postrial_pvalues_contours, cmap = colormap_postrial_pv)
@@ -275,18 +297,18 @@ if __name__ == '__main__':
 
     #plot the contour corresponding to equal performance for lambda performance
     equal_performance_contour_lambda = ax_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda), levels = [benchmark_performance_lambda[0, 0]], colors = 'black', linestyles = 'dashed', linewidths = 1)
-    equal_performance_contour_lambda_corr = ax_corrected_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = [benchmark_performance_lambda_corr[0, 0]], colors = 'black', linestyles = 'dashed', linewidths = 1)
+    #equal_performance_contour_lambda_corr = ax_corrected_lambda_performance.contour(flare_duration, flare_intensity, np.transpose(performance_factor_lambda_corr), levels = [benchmark_performance_lambda_corr[0, 0]], colors = 'black', linestyles = 'dashed', linewidths = 1)
 
     #define the style of the axis
     lambda_performance_title = r'$\mu = %.2f$ events, $T_{\mathrm{obs}} = %.0f$ years' % (mu_at_flare, obs_time_years)
     lambda_performance_xlabel = r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$'
-    lambda_performance_ylabel = r'$n_{\mathrm{events}}$'
+    lambda_performance_ylabel = r'$f$'
 
     postrial_pv_xlabel = r'$\log_{10} \left( \Delta t_{\mathrm{flare}} / 10 \mathrm{\,years} \right)$'
-    postrial_pv_ylabel = r'$n_{\mathrm{events}}$'
+    postrial_pv_ylabel = r'$f$'
 
     ax_lambda_performance = set_style(ax_lambda_performance, lambda_performance_title, lambda_performance_xlabel, lambda_performance_ylabel, 12)
-    ax_corrected_lambda_performance = set_style(ax_corrected_lambda_performance, lambda_performance_title, lambda_performance_xlabel, lambda_performance_ylabel, 12)
+    #ax_corrected_lambda_performance = set_style(ax_corrected_lambda_performance, lambda_performance_title, lambda_performance_xlabel, lambda_performance_ylabel, 12)
 
     ax_postrial_pvalues_poisson = set_style(ax_postrial_pvalues_poisson, 'Poisson', postrial_pv_xlabel, postrial_pv_ylabel, 12)
     ax_postrial_pvalues_lambda = set_style(ax_postrial_pvalues_lambda, r'$\Lambda$', postrial_pv_xlabel, postrial_pv_ylabel, 12)
@@ -295,12 +317,12 @@ if __name__ == '__main__':
     ax_postrial_pvs_quantile_lambda = set_style(ax_postrial_pvs_quantile_lambda, r'$\Lambda$', postrial_pv_xlabel, postrial_pv_ylabel, 12)
 
     #create and define style of color bar
-    cb_title_lambda_performance = r'frac. of samples with $p_{\Lambda} \leq p_{n} \,(\%)$'
-    cb_title_postrial_pv = r'frac. of samples with $p^* \leq 10^{-2} \,(\%)$'
-    cb_title_postrial_pv_quantile = r'$5 \%$ quantile of $p^*$ distribution'
+    cb_title_lambda_performance = r'frac. of samples with $p_{\Lambda}^* \leq p_{n}^* \,(\%)$'
+    cb_title_postrial_pv = r'frac. of samples with $p^* \leq 10^{%.0f} \,(\%%)$' % pvalue_threshold
+    cb_title_postrial_pv_quantile = r'$%.0f \%%$ quantile of $p^*$ distribution' % (100*quantile)
 
     create_colorbar(fig_lambda_performance_against_poisson, ax_lambda_performance, contour_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
-    create_colorbar(fig_lambda_performance_against_poisson, ax_corrected_lambda_performance, contour_corrected_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
+    #create_colorbar(fig_lambda_performance_against_poisson, ax_corrected_lambda_performance, contour_corrected_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
 
     create_colorbar(fig_postrial_pvalues, ax_postrial_pvalues_poisson, contour_postrial_pvalues_poisson, colormap_postrial_pv, cb_title_postrial_pv, [postrial_pvalues_lower, postrial_pvalues_upper], 12)
     create_colorbar(fig_postrial_pvalues, ax_postrial_pvalues_lambda, contour_postrial_pvalues_lambda, colormap_postrial_pv, cb_title_postrial_pv, [postrial_pvalues_lower, postrial_pvalues_upper], 12)
@@ -313,7 +335,7 @@ if __name__ == '__main__':
     intuitive_duration_array_label = ['1 day', '1 week', '1 month', '1 year']
 
     create_intuitive_duration_axis(ax_lambda_performance, intuitive_duration_array, intuitive_duration_array_label)
-    create_intuitive_duration_axis(ax_corrected_lambda_performance, intuitive_duration_array, intuitive_duration_array_label)
+    #create_intuitive_duration_axis(ax_corrected_lambda_performance, intuitive_duration_array, intuitive_duration_array_label)
     create_intuitive_duration_axis(ax_postrial_pvalues_poisson, intuitive_duration_array, intuitive_duration_array_label)
     create_intuitive_duration_axis(ax_postrial_pvalues_lambda, intuitive_duration_array, intuitive_duration_array_label)
     create_intuitive_duration_axis(ax_postrial_pvs_quantile_poisson, intuitive_duration_array, intuitive_duration_array_label)
@@ -321,7 +343,7 @@ if __name__ == '__main__':
 
     #plot vertical lines with the intuitive time scales
     ax_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
-    ax_corrected_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
+    #ax_corrected_lambda_performance.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
 
     ax_postrial_pvalues_poisson.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
     ax_postrial_pvalues_lambda.vlines(x = intuitive_duration_array, ymin = flare_intensity[0,0], ymax = flare_intensity[0,-1], color = 'tab:gray', alpha = .7, linestyle = 'dashed')
@@ -337,52 +359,165 @@ if __name__ == '__main__':
     fig_postrial_pvalues.savefig(os.path.join(output_path, 'postrialPValues_below_threshold_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))
     fig_postrial_pvs_quantile.savefig(os.path.join(output_path, 'postrialPValues_Quantile005_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))
 
-    # color_list = color_map(np.linspace(0.2, .9, len(events_per_flare_array[::2])))
-    #
-    # #find the array of lambda and lambda_pvalues for each intensity and duration
-    # lambda_dist_1day = all_lambda_tensor[j, np.searchsorted(flare_duration_array, duration_1day),:]
-    # lambda_dist_1month = all_lambda_tensor[j, np.searchsorted(flare_duration_array, duration_1month),:]
-    #
-    # lambda_pvalue_dist_1day = all_lambda_pvalues_tensor[j, np.searchsorted(flare_duration_array, duration_1day),:]
-    # lambda_pvalue_dist_1month = all_lambda_pvalues_tensor[j, np.searchsorted(flare_duration_array, duration_1month),:]
-    #
-    # #build distributions
-    # lambda_1day_bin_centers, lambda_1day_bin_content, lambda_1day_bin_error = data_2_binned_errorbar(lambda_dist_1day, lambda_bins, lambda_lower, lambda_upper, np.ones(n_samples), False)
-    # lambda_1month_bin_centers, lambda_1month_bin_content, lambda_1month_bin_error = data_2_binned_errorbar(lambda_dist_1month, lambda_bins, lambda_lower, lambda_upper, np.ones(n_samples), False)
-    #
-    # lambda_pv_1day_bin_centers, lambda_pv_1day_bin_content, lambda_pv_1day_bin_error = data_2_binned_errorbar(np.log10(lambda_pvalue_dist_1day), lambda_pv_bins, -10, 0, np.ones(n_samples), False)
-    # lambda_pv_1month_bin_centers, lambda_pv_1month_bin_content, lambda_pv_1month_bin_error = data_2_binned_errorbar(np.log10(lambda_pvalue_dist_1month), lambda_pv_bins, -10, 0, np.ones(n_samples), False)
-    #
-    # #plot distributions
-    # ax_lambda_dist_1day.plot(lambda_1day_bin_centers, lambda_1day_bin_content / np.trapz(lambda_1day_bin_content, x = lambda_1day_bin_centers), color = color_list[j], linewidth = 1)
-    # ax_lambda_dist_1month.plot(lambda_1month_bin_centers, lambda_1month_bin_content / np.trapz(lambda_1month_bin_content, x = lambda_1month_bin_centers), color = color_list[j], linewidth = 1)
-    #
-    # ax_lambda_pvalue_dist_1day.plot(lambda_pv_1day_bin_centers, lambda_pv_1day_bin_content / np.trapz(lambda_pv_1day_bin_content, x = lambda_pv_1day_bin_centers), color = color_list[j], linewidth = 1)
-    # ax_lambda_pvalue_dist_1month.plot(lambda_pv_1month_bin_centers, lambda_pv_1month_bin_content / np.trapz(lambda_pv_1month_bin_content, x = lambda_pv_1month_bin_centers), color = color_list[j], linewidth = 1)
-    #
-    #
-    # #plot nominal distributions
-    # ax_lambda_dist_1day.plot(lambda_dist_bin_centers[::10], lambda_dist_bin_content[::10] / lambda_dist_integral, color = 'gray', linestyle = 'dashed', linewidth = 1)
-    # ax_lambda_dist_1month.plot(lambda_dist_bin_centers[::10], lambda_dist_bin_content[::10] / lambda_dist_integral, color = 'gray', linestyle = 'dashed', linewidth = 1)
-    #
-    # pvalue_cont = np.linspace(-10, 0, 100)
-    # pvalue_pdf_cont = np.log(10)*np.power(10, pvalue_cont)
-    # ax_lambda_pvalue_dist_1day.plot(pvalue_cont, pvalue_pdf_cont, color = 'tab:gray', linestyle = 'dashed', linewidth = 1)
-    # ax_lambda_pvalue_dist_1month.plot(pvalue_cont, pvalue_pdf_cont, color = 'tab:gray', linestyle = 'dashed', linewidth = 1)
-    #
-    # ax_lambda_pvalue_dist_1day.vlines(np.log10(poisson_pvalue), 1e-5, 5, color = 'black', linestyle = 'dashed', linewidth = 1)
-    # ax_lambda_pvalue_dist_1month.vlines(np.log10(poisson_pvalue), 1e-5, 5, color = 'black', linestyle = 'dashed', linewidth = 1)
-    #
-    # #define the style of the plots
-    # ax_lambda_dist_1day.set_yscale('log')
-    # ax_lambda_dist_1month.set_yscale('log')
-    #
-    # ax_lambda_pvalue_dist_1day.set_ylim(1e-4, 5)
-    # ax_lambda_pvalue_dist_1month.set_ylim(1e-4, 5)
-    # ax_lambda_pvalue_dist_1day.set_yscale('log')
-    # ax_lambda_pvalue_dist_1month.set_yscale('log')
-    #
-    # ax_lambda_dist_1day = set_style(ax_lambda_dist_1day, r'$\Delta t_{\mathrm{flare}} = 1$ day', r'$\Lambda$', r'Prob. density', 12)
-    # ax_lambda_dist_1month = set_style(ax_lambda_dist_1month, r'$\Delta t_{\mathrm{flare}} = 1$ month', r'$\Lambda$', r'Prob. density', 12)
-    # ax_lambda_pvalue_dist_1day = set_style(ax_lambda_pvalue_dist_1day, r'', r'$\log_{10} p_{\Lambda}$', r'Prob. density', 12)
-    # ax_lambda_pvalue_dist_1month = set_style(ax_lambda_pvalue_dist_1month, r'', r'$\log_{10} p_{\Lambda}$', r'Prob. density', 12)
+    #--------------------------------------------
+    # Plot the distribution of lambda and pvalues for events with flares with a given intensity and duration
+    #--------------------------------------------
+    fig_estimator_dist_1day = plt.figure(figsize=(10, 6))
+    fig_estimator_dist_1month = plt.figure(figsize=(10, 6))
+
+    estimator_dist_title = r'$\mu = %.2f$ events, $T_{\mathrm{obs}} = %.0f$ years' % (mu_at_flare, obs_time_years)
+
+    fig_estimator_dist_1day.suptitle(estimator_dist_title + r', $\Delta T_{\mathrm{flare}} = 1$ day', fontsize = 12)
+    fig_estimator_dist_1month.suptitle(estimator_dist_title + r', $\Delta T_{\mathrm{flare}} = 1$ month', fontsize = 12)
+
+    #initialize axis
+    ax_lambda_dist_1day = fig_estimator_dist_1day.add_subplot(2, 2, 1)
+    ax_poisson_dist_1day = fig_estimator_dist_1day.add_subplot(2, 2, 2)
+    ax_lambda_pvalues_1day = fig_estimator_dist_1day.add_subplot(2, 2, 3)
+    ax_poisson_pvalues_1day = fig_estimator_dist_1day.add_subplot(2, 2, 4)
+
+    ax_lambda_dist_1month = fig_estimator_dist_1month.add_subplot(2, 2, 1)
+    ax_poisson_dist_1month = fig_estimator_dist_1month.add_subplot(2, 2, 2)
+    ax_lambda_pvalues_1month = fig_estimator_dist_1month.add_subplot(2, 2, 3)
+    ax_poisson_pvalues_1month = fig_estimator_dist_1month.add_subplot(2, 2, 4)
+
+    #ax_lambda_pvalues_1day = fig_lambda_dist.add_subplot(2, 2, 3)
+    #ax_lambda_pvalues_1month = fig_lambda_dist.add_subplot(2, 2, 4)
+
+    #define the intensities of the flares to be plotted
+    plotted_flare_intensities = np.array([2, 5, 7, 10, 13])
+    plotted_flare_durations = np.log10(np.array([1, 30]) * (86_164 / obs_time))
+
+    #save the distributions to be plotted
+    flare_intensity_indices = np.searchsorted(flare_intensity[0], plotted_flare_intensities)
+    flare_duration_indices = np.searchsorted(flare_duration[:,0], plotted_flare_durations)
+
+    lambda_flares = estimators_flares[:, :, 1, :]
+    #pvalues_lambda_flares = pvalues_flares[:, :, 1, :]
+
+    poisson_flares = estimators_flares[:, :, 0, :]
+    #pvalues_poisson_flares = pvalues_flares[:, :, 0, :]
+
+    #refering to lambda
+    plotted_lambda_dist_flare = lambda_flares[flare_intensity_indices[:, np.newaxis], flare_duration_indices, :]
+    plotted_lambda_pvalues_flare = postrial_pvalues_lambda[flare_intensity_indices[:, np.newaxis], flare_duration_indices, :]
+    plotted_poisson_dist_flare = poisson_flares[flare_intensity_indices[:, np.newaxis], flare_duration_indices, :]
+    plotted_poisson_pvalues_flare = postrial_pvalues_poisson[flare_intensity_indices[:, np.newaxis], flare_duration_indices, :]
+
+    plotted_lambda_dist_iso = estimators_iso[0, 0, 1, :]
+    plotted_poisson_dist_iso = estimators_iso[0, 0, 0, :]
+
+    #refering to poisson
+
+    #define the number of bins for the lambda distribution and the limits
+    nbins_poisson = np.append(np.arange(0, 60, 1), 60)
+    nbins_lambda = np.append(np.arange(-16, 150, 2), 150)
+    nbins_pvalues = np.append(np.arange(-4, 0, .1), 0)
+
+    #define the color array
+    color_array = (flare_intensity[0] - np.min(flare_intensity[0])) / (np.max(flare_intensity[0]) - np.min(flare_intensity[0]))
+    color_array = colormap_postrial_pv(color_array[flare_intensity_indices])
+
+    #plot lambda distributions
+    for i, flare_int in enumerate(plotted_flare_intensities):
+
+        #build the lambda and n distributions
+        lambda_bin_centers_1day, lambda_bin_content_1day, lambda_bin_error_1day = get_normalized_pdf(plotted_lambda_dist_flare[i, 0], nbins_lambda)
+        lambda_bin_centers_1month, lambda_bin_content_1month, lambda_bin_error_1month = get_normalized_pdf(plotted_lambda_dist_flare[i, 1], nbins_lambda)
+
+        poisson_bin_centers_1day, poisson_bin_content_1day, poisson_bin_error_1day = get_normalized_pdf(plotted_poisson_dist_flare[i, 0], nbins_poisson)
+        poisson_bin_centers_1month, poisson_bin_content_1month, poisson_bin_error_1month = get_normalized_pdf(plotted_poisson_dist_flare[i, 1], nbins_poisson)
+
+        #lambda_bin_centers_1month, lambda_bin_content_1month, lambda_bin_error_1month = get_normalized_pdf(plotted_lambda_dist_flare[i, 1], nbins_lambda)
+
+        #build the pvalue distributions
+        pv_lambda_bin_centers_1day, pv_lambda_bin_content_1day, pv_lambda_bin_error_1day = get_normalized_pdf(np.log10(plotted_lambda_pvalues_flare[i, 0]), nbins_pvalues)
+        pv_lambda_bin_centers_1month, pv_lambda_bin_content_1month, pv_lambda_bin_error_1month = get_normalized_pdf(np.log10(plotted_lambda_pvalues_flare[i, 1]), nbins_pvalues)
+
+        pv_poisson_bin_centers_1day, pv_poisson_bin_content_1day, pv_poisson_bin_error_1day = get_normalized_pdf(np.log10(plotted_poisson_pvalues_flare[i, 0]), nbins_pvalues)
+        pv_poisson_bin_centers_1month, pv_poisson_bin_content_1month, pv_poisson_bin_error_1month = get_normalized_pdf(np.log10(plotted_poisson_pvalues_flare[i, 1]), nbins_pvalues)
+
+        #pv_lambda_bin_centers_1month, pv_lambda_bin_content_1month, pv_lambda_bin_error_1month = get_normalized_pdf(np.log10(plotted_pvalues_lambda_dist_flare[i, 1]), nbins_pvalues)
+
+        #print(lambda_bin_content_1day[50])
+        #print(lambda_bin_content_1month[50])
+
+        ax_lambda_dist_1day.errorbar(lambda_bin_centers_1day, lambda_bin_content_1day, yerr = lambda_bin_error_1day, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_poisson_dist_1day.errorbar(poisson_bin_centers_1day, poisson_bin_content_1day, yerr = poisson_bin_error_1day, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_lambda_pvalues_1day.errorbar(pv_lambda_bin_centers_1day, pv_lambda_bin_content_1day, yerr = pv_lambda_bin_error_1day, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_poisson_pvalues_1day.errorbar(pv_poisson_bin_centers_1day, pv_poisson_bin_content_1day, yerr = pv_poisson_bin_error_1day, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+
+        ax_lambda_dist_1month.errorbar(lambda_bin_centers_1month, lambda_bin_content_1month, yerr = lambda_bin_error_1month, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_poisson_dist_1month.errorbar(poisson_bin_centers_1month, poisson_bin_content_1month, yerr = poisson_bin_error_1month, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_lambda_pvalues_1month.errorbar(pv_lambda_bin_centers_1month, pv_lambda_bin_content_1month, yerr = pv_lambda_bin_error_1month, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+        ax_poisson_pvalues_1month.errorbar(pv_poisson_bin_centers_1month, pv_poisson_bin_content_1month, yerr = pv_poisson_bin_error_1month, color = color_array[i], marker = 'o', linestyle = 'None', markersize = 2)
+
+        #ax_lambda_pvalues_1day.errorbar(pv_lambda_bin_centers_1day, pv_lambda_bin_content_1day, yerr = pv_lambda_bin_error_1day)
+        #ax_lambda_pvalues_1month.errorbar(pv_lambda_bin_centers_1month, pv_lambda_bin_content_1month, yerr = pv_lambda_bin_error_1month)
+
+    #plot the lambda and n distributions for isotropy
+    lambda_bin_centers_1day, lambda_bin_content_1day, lambda_bin_error_1day = get_normalized_pdf(plotted_lambda_dist_iso, nbins_lambda)
+    poisson_bin_centers_1day, poisson_bin_content_1day, poisson_bin_error_1day = get_normalized_pdf(plotted_poisson_dist_iso, nbins_poisson)
+
+    lambda_bin_centers_1month, lambda_bin_content_1month, lambda_bin_error_1month = get_normalized_pdf(plotted_lambda_dist_iso, nbins_lambda)
+    poisson_bin_centers_1month, poisson_bin_content_1month, poisson_bin_error_1month = get_normalized_pdf(plotted_poisson_dist_iso, nbins_poisson)
+
+    ax_lambda_dist_1day.plot(lambda_bin_centers_1day, lambda_bin_content_1day, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
+    ax_lambda_dist_1month.plot(lambda_bin_centers_1month, lambda_bin_content_1month, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
+    ax_lambda_dist_1day.fill_between(lambda_bin_centers_1day, lambda_bin_content_1day - lambda_bin_error_1day, lambda_bin_content_1day  + lambda_bin_error_1day, color = 'tab:grey', alpha = .5)
+    ax_lambda_dist_1month.fill_between(lambda_bin_centers_1month, lambda_bin_content_1month - lambda_bin_error_1month, lambda_bin_content_1month  + lambda_bin_error_1month, color = 'tab:grey', alpha = .5)
+
+    ax_poisson_dist_1day.plot(poisson_bin_centers_1day, poisson_bin_content_1day, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
+    ax_poisson_dist_1month.plot(poisson_bin_centers_1month, poisson_bin_content_1month, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
+
+    ax_poisson_dist_1day.fill_between(poisson_bin_centers_1day, poisson_bin_content_1day - poisson_bin_error_1day, poisson_bin_content_1day  + poisson_bin_error_1day, color = 'tab:grey', alpha = .5)
+    ax_poisson_dist_1month.fill_between(poisson_bin_centers_1month, poisson_bin_content_1month - poisson_bin_error_1month, poisson_bin_content_1month  + poisson_bin_error_1month, color = 'tab:grey', alpha = .5)
+
+    #define the style of the axis
+    ax_lambda_dist_1day.set_yscale('log')
+    ax_poisson_dist_1day.set_yscale('log')
+    ax_lambda_pvalues_1day.set_yscale('log')
+    ax_poisson_pvalues_1day.set_yscale('log')
+
+    ax_lambda_dist_1month.set_yscale('log')
+    ax_poisson_dist_1month.set_yscale('log')
+    ax_lambda_pvalues_1month.set_yscale('log')
+    ax_poisson_pvalues_1month.set_yscale('log')
+
+
+    ax_lambda_pvalues_1day.set_ylim(1e-3, 10)
+    ax_poisson_pvalues_1day.set_ylim(1e-3, 10)
+    ax_lambda_pvalues_1month.set_ylim(1e-3, 10)
+    ax_poisson_pvalues_1month.set_ylim(1e-3, 10)
+
+    #create the color bars
+    map = cm.ScalarMappable(norm=mcolors.Normalize(vmin = np.min(flare_intensity[0]), vmax = np.max(flare_intensity[0]) ), cmap =  colormap_postrial_pv)
+
+    create_colorbar(fig_estimator_dist_1day, ax_lambda_dist_1day, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1day, ax_poisson_dist_1day, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1day, ax_lambda_pvalues_1day, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1day, ax_poisson_pvalues_1day, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+
+    create_colorbar(fig_estimator_dist_1month, ax_lambda_dist_1month, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1month, ax_poisson_dist_1month, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1month, ax_lambda_pvalues_1month, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+    create_colorbar(fig_estimator_dist_1month, ax_poisson_pvalues_1month, map, colormap_postrial_pv, '$f$', [np.min(flare_intensity[0]), np.max(flare_intensity[0])], 12)
+
+    #create_colorbar(fig_estimator_dist_1day, ax_corrected_lambda_performance, contour_corrected_lambda_performance, colormap, cb_title_lambda_performance, [lambda_performance_lower, lambda_performance_upper], 12)
+
+    ax_lambda_dist_1day = set_style(ax_lambda_dist_1day, r'$f_{\Lambda}(\Lambda)$', '$\Lambda$', r'Prob. density', 14)
+    ax_poisson_dist_1day = set_style(ax_poisson_dist_1day, 'Poisson', r'$n$', r'Prob. density', 14)
+    ax_lambda_pvalues_1day = set_style(ax_lambda_pvalues_1day, '', r'$\log_{10} p_{\Lambda}^*$', r'Prob. density', 14)
+    ax_poisson_pvalues_1day = set_style(ax_poisson_pvalues_1day, '', r'$\log_{10} p_n^*$', r'Prob. density', 14)
+
+    ax_lambda_dist_1month = set_style(ax_lambda_dist_1month, r'$f_{\Lambda}(\Lambda)$', '$\Lambda$', r'Prob. density', 14)
+    ax_poisson_dist_1month = set_style(ax_poisson_dist_1month, 'Poisson', r'$n$', r'Prob. density', 14)
+    ax_lambda_pvalues_1month = set_style(ax_lambda_pvalues_1month, '', r'$\log_{10} p_{\Lambda}^*$', r'Prob. density', 14)
+    ax_poisson_pvalues_1month = set_style(ax_poisson_pvalues_1month, '', r'$\log_{10} p_n^*$', r'Prob. density', 14)
+
+    #save figure
+    fig_estimator_dist_1day.tight_layout()
+    fig_estimator_dist_1month.tight_layout()
+
+    fig_estimator_dist_1day.savefig(os.path.join(output_path, 'LambdaDist_and_PValues_flareSubSample_1day_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))
+    fig_estimator_dist_1month.savefig(os.path.join(output_path, 'LambdaDist_and_PValues_flareSubSample_1month_muAtFlare_%.2f_targetRadius_%.1f.pdf' % (mu_at_flare, np.degrees(target_radius))))

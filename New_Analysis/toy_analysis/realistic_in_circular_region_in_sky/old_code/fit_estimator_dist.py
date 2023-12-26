@@ -149,24 +149,6 @@ def get_fit_deviance(lambda_bin_centers, lambda_bin_content, lambda_bin_error, f
 
     return deviance
 
-# def get_total_kde(input_path, file_kde_lambda_dist, file_kde_corrected_lambda_dist):
-#
-#     kde_lambda_dist = []
-#     kde_corrected_dist = []
-#
-#     for file in os.listdir(input_path):
-#
-#         filename = os.path.join(input_path, file)
-#
-#         if os.path.isfile(filename) and file_kde_lambda_dist in filename:
-#
-#             with open(filename, 'rb') as f:
-#                 kde_lambda_dist.append(pickle.load(f)[:,-1])
-#
-#     kde_lambda_dist = lambda x: sum(kde(x) for kde in kde_lambda_dist[:,])
-#
-#     print(kde_lambda_dist)
-
 #define the main function
 if __name__ == '__main__':
 
