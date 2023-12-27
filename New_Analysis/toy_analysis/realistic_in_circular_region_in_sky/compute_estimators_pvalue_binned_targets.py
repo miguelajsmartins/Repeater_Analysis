@@ -46,6 +46,7 @@ def get_lambda_pvalue(index, lambda_dist, lambda_array):
 
     #estimate and interpolate the cdf
     is_discrete_cdf = cdf_bin_centers <= fit_initial
+
     discrete_cdf = cdf_bin_content[is_discrete_cdf]
     interpolated_cdf = akima_spline(cdf_bin_centers[is_discrete_cdf], discrete_cdf)
     #interpolated_cdf = interp1d(cdf_bin_centers[is_discrete_cdf], discrete_cdf, kind = 'linear')
@@ -171,10 +172,13 @@ if __name__ == '__main__':
     #save file containing distribution of lambda as a function of rate
     lambda_dist_path = './datasets/lambda_dist'
 
-    file_lambda_dist = 'CDF_GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_lambda_dist = 'CDF_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_10000.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_kde_lambda_dist = 'CDF_GaussianKernelEstimated_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+
     file_corrected_lambda_dist = 'CDF_GaussianKernelEstimated_Corrected_Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_100.json' % (np.degrees(patch_radius), np.degrees(target_radius))
 
     file_lambda_dist = os.path.join(lambda_dist_path, file_lambda_dist)
+    file_kde_lambda_dist = os.path.join(lambda_dist_path, file_kde_lambda_dist)
     file_corrected_lambda_dist = os.path.join(lambda_dist_path, file_corrected_lambda_dist)
 
     #check if both requested file exist
@@ -185,14 +189,15 @@ if __name__ == '__main__':
     start = datetime.now()
 
     lambda_pvalue_average = []
-    poisson_pvalue_average = []
+    kde_lambda_pvalue_average = []
 
-    for i, file in enumerate(filelist[:10]):
+    for i, file in enumerate(filelist):
 
         pvalue_data = compute_pvalues(file, file_lambda_dist, file_corrected_lambda_dist)
+        kde_pvalue_data = compute_pvalues(file, file_kde_lambda_dist, file_corrected_lambda_dist)
 
         lambda_pvalue_average.append(pvalue_data['lambda_pvalues'].values)
-        poisson_pvalue_average.append(pvalue_data['poisson_pvalues'].values)
+        kde_lambda_pvalue_average.append(kde_pvalue_data['lambda_pvalues'].values)
 
         if i % 10 == 0:
             print('%i / %i files processed!' % (i, len(filelist)))
@@ -200,12 +205,13 @@ if __name__ == '__main__':
     print('Took', datetime.now() - start, 's to compute pvalues for all files')
 
     lambda_pvalue_average = np.ravel(lambda_pvalue_average)
-    poisson_pvalue_average = np.ravel(poisson_pvalue_average)
+    kde_lambda_pvalue_average = np.ravel(kde_lambda_pvalue_average)
 
     #print(lambda_pvalue_average.shape)
 
     x = np.linspace(-6, 0)
-    plt.hist(lambda_pvalue_average, bins = 100, range = [0, .1], histtype = 'step')
+    plt.hist(lambda_pvalue_average, bins = 100, range = [0, 1], histtype = 'step')
+    plt.hist(kde_lambda_pvalue_average, bins = 100, range = [0, 1], histtype = 'step')
     #plt.plot(x, (len(lambda_pvalue_average) * 6 / 100)*np.log(10)*np.power(10, x))
     #plt.yscale('log')
     #plt.hist(poisson_pvalue_average, bins = 100, histtype = 'step')

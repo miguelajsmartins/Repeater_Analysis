@@ -54,9 +54,8 @@ def compute_doublets_per_target(event_data, ra_target, dec_target, target_radius
     splitted_dec_target = np.split(dec_target, split_points)
     splitted_ra_target = np.split(ra_target, split_points)
 
-    #to save doublets and time differences
+    #to save doublets
     doublet_per_target = []
-    time_diff_per_target = []
 
     for i, (splitted_dec_t, ra_t) in enumerate(zip(splitted_dec_target, splitted_ra_target)):
 
@@ -87,16 +86,9 @@ def compute_doublets_per_target(event_data, ra_target, dec_target, target_radius
         event_dec_in_target = np.take_along_axis(event_dec_in_target, sorted_time_indices, axis=1)
         event_ra_in_target = np.take_along_axis(event_ra_in_target, sorted_time_indices, axis=1)
 
-        #eliminate nan columns for easier manipulation
-        is_nan = np.all(np.isnan(event_time_in_target), axis = 0)
-
-        event_time_in_target = event_time_in_target[:, np.logical_not(is_nan)]
-        event_dec_in_target = event_dec_in_target[:, np.logical_not(is_nan)]
-        event_ra_in_target = event_ra_in_target[:, np.logical_not(is_nan)]
-
         #computes the time difference between consecutive events
         time_diff = np.diff(event_time_in_target, axis=1)
-
+        
         is_doublet = time_diff < tau
 
         #forms event doublets
@@ -111,30 +103,16 @@ def compute_doublets_per_target(event_data, ra_target, dec_target, target_radius
 
         doublet_per_target.append(doublets)
 
-        #save the time differences between events per target
-        time_diff_per_target.append(time_diff)
-
         if i % 10 == 0:
             print('%i / %i target bands done!' % (i, len(unique_dec_target)))
 
-    #concatenate doublet array
     doublet_per_target = np.concatenate(doublet_per_target, axis=0)
 
-    #make sure that all sub arrays of time_diff have the same dimension along columns
-    max_size = max([time_diff.shape[1] for time_diff in time_diff_per_target])
-    time_diff_per_target = [np.pad(time_diff, ((0, 0), (0, max_size - time_diff.shape[1])), mode = 'constant', constant_values = np.nan) for time_diff in time_diff_per_target]
+    column_names = ['gps_time_1', 'gps_time_2', 'ra_1', 'ra_2', 'dec_1', 'dec_2']
 
-    #concatenate time_diff array
-    time_diff_per_target = np.concatenate(time_diff_per_target, axis = 0)
+    doublet_data = pd.DataFrame(doublet_per_target, columns=column_names)
 
-    #save dataframes with data
-    doublet_column_names = ['gps_time_1', 'gps_time_2', 'ra_1', 'ra_2', 'dec_1', 'dec_2']
-    time_diff_column_names = ['ra_target', 'dec_target', 'time_diffs_per_target']
-
-    doublet_data = pd.DataFrame(doublet_per_target, columns=doublet_column_names)
-    time_diff_data = pd.DataFrame(zip(ra_target, dec_target, time_diff_per_target), columns = time_diff_column_names)
-
-    return doublet_data, time_diff_data
+    return doublet_data
 
 #define the input path and save files with event samples
 input_path = './datasets/iso_samples'
@@ -193,13 +171,12 @@ integrated_exposure = 2*np.pi*np.trapz(unique_exposure*np.cos(unique_dec_target)
 exposure_map = compute_directional_exposure(dec_target, theta_max, pao_lat) / integrated_exposure
 
 #define the output path
-output_path_doublets = './datasets/iso_doublets'
-output_path_time_diff = './datasets/iso_time_diff'
+output_path = './datasets/iso_doublets'
 
 start_all = datetime.now()
 
 #compute the number of doublets for each sample
-for i, input_file in enumerate(input_filelist[:1]):
+for i, input_file in enumerate(input_filelist):
 
     start = datetime.now()
 
@@ -217,7 +194,7 @@ for i, input_file in enumerate(input_filelist[:1]):
     mu_per_target = n_events*exposure_map*target_area
     rate_per_target = mu_per_target
 
-    doublet_data, time_diff_data = compute_doublets_per_target(event_data, ra_target, dec_target, target_radius, tau)
+    doublet_data = compute_doublets_per_target(event_data, ra_target, dec_target, target_radius, tau)
 
     #clean nan and duplicated events
     doublet_data.dropna(inplace = True, ignore_index = True)
@@ -225,25 +202,12 @@ for i, input_file in enumerate(input_filelist[:1]):
 
     #convert angles to degrees
     doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']] = np.degrees(doublet_data[['ra_1', 'ra_2', 'dec_1', 'dec_2']])
-    time_diff_data[['ra_target', 'dec_target']] = np.degrees(time_diff_data[['ra_target', 'dec_target']])
 
     print(doublet_data)
 
-    #add expected number of events and expected rate columns to time_diff_data
-    time_diff_data['mu_per_target'] = pd.Series(mu_per_target)
-    time_diff_data['rate_per_target'] = pd.Series(mu_per_target / obs_time)
-
-    #clean nan values to save space
-    time_diff_data['time_diffs_per_target'] = time_diff_data['time_diffs_per_target'].apply(lambda x: x[np.logical_not(np.isnan(x))])
-
-    print(time_diff_data)
-
     #save doublet data into a parquet file
-    output_file = os.path.join(output_path_doublets, 'Doublets_binnedTargetCenters_targetRadius_%.1fdeg_' % np.degrees(target_radius) + basename)
-    output_file_time_diff = os.path.join(output_path_time_diff, 'TimeDiff_binnedTargetCenters_targetRadius_%.1fdeg_' % np.degrees(target_radius) + os.path.splitext(basename)[0] + '.json')
-
+    output_file = os.path.join(output_path, 'Doublets_binnedTargetCenters_targetRadius_%.1fdeg_' % np.degrees(target_radius) + basename)
     doublet_data.to_parquet(output_file, index = True)
-    time_diff_data.to_json(output_file_time_diff, index = True)
 
     print('Treating %i / %i event sample took' % (i, len(input_filelist)), datetime.now() - start, 's')
 

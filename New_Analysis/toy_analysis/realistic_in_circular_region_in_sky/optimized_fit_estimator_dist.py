@@ -123,20 +123,8 @@ def get_lambda_dist_per_mu(index, lambda_dist_per_mu):
     #compute bin centers
     lambda_bin_centers = get_bin_centers(lambda_bin_edges)
 
-    #clean values of the pdf that are very close to 0
-    #is_zero = np.isclose(lambda_bin_content, 0, atol = 1e-7)
-
-    #lambda_bin_centers[is_zero] = 0 #lambda_bin_centers[np.logical_not(is_zero)]
-    #lambda_bin_content[is_zero] = 0 #lambda_bin_content[np.logical_not(is_zero)]
-
     #compute bin errors. Mind that each lambda distribution was estimated from 100 samples of skies, so an additional factor of 100 is needed to estimate the errors
     lambda_bin_error = np.sqrt(lambda_bin_content) #/ 100
-
-    #normalize distribution
-    #integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
-
-    #lambda_bin_content = lambda_bin_content / integral
-    #lambda_bin_error = lambda_bin_error / integral
 
     return mu_low_edge, mu_upper_edge, lambda_bin_centers, lambda_bin_content, lambda_bin_error
 
@@ -215,7 +203,6 @@ if __name__ == '__main__':
 
     lambda_dist_per_mu = pd.read_json(file_lambda_dist)
     #corrected_lambda_dist_per_mu = pd.read_json(file_kde_corrected_lambda_dist)
-
 
     # ------------------------------------------
     # Plot the distribution of Lambda and corrected Lambda for each mu value. Fits the distribution as well

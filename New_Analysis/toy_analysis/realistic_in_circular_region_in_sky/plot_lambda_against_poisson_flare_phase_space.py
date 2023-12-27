@@ -26,6 +26,8 @@ from hist_manip import data_2_binned_errorbar
 
 from event_manip import compute_directional_exposure
 
+from hist_manip import get_bin_centers
+
 #from fit_routines import perform_fit_exp
 
 from axis_style import set_style
@@ -145,6 +147,53 @@ def get_normalized_pdf(quantity_array, bin_array):
 
     return bin_centers, bin_content, bin_error
 
+#get the lambda distribution corresponding to the observed mu value
+def get_lambda_dist_iso(patch_radius, target_radius, mu_flare):
+
+    #define the input path
+    input_path = 'datasets/lambda_dist'
+
+    #get the files
+    file_lambda_dist = 'Lambda_dist_patchRadius_%.0f_targetRadius_%.1f_samples_10000.json' % (np.degrees(patch_radius), np.degrees(target_radius))
+    file_lambda_cdf = 'CDF_' + file_lambda_dist
+
+    file_lambda_dist = os.path.join(input_path, file_lambda_dist)
+    file_lambda_cdf = os.path.join(input_path, file_lambda_cdf)
+
+    if (not os.path.exists(file_lambda_dist)) or (not os.path.exists(file_lambda_cdf)):
+        print('Some of the files with the nominal lambda dist does not exist!')
+        exit()
+
+    #get the lambda distribution for isotropy
+    lambda_dist = pd.read_json(file_lambda_dist)
+    lambda_cdf = pd.read_json(file_lambda_cdf)
+
+    #get the row corresponding to the expected number of events at the flare location
+    lambda_dist = lambda_dist[np.logical_and(lambda_dist['mu_low_edges'] < mu_flare, lambda_dist['mu_upper_edges'] > mu_flare)]
+    lambda_cdf = lambda_cdf[np.logical_and(lambda_cdf['mu_low_edges'] < mu_flare, lambda_cdf['mu_upper_edges'] > mu_flare)]
+
+    #save the lambda distribution
+    lambda_bin_centers = get_bin_centers(lambda_dist['lambda_bin_edges'].to_numpy()[0])
+    lambda_bin_content = np.array(lambda_dist['lambda_bin_content'].to_numpy()[0])
+
+    lambda_tail_slope = lambda_cdf['tail_slope'].to_numpy()[0]
+    lambda_fit_init = lambda_cdf['fit_init'].to_numpy()[0]
+
+    #plot the interpolated pdf and the fitted portion of the lambda pdf
+    integral = np.trapz(lambda_bin_content, x = lambda_bin_centers)
+    lambda_cdf = np.cumsum(lambda_bin_content) / np.sum(lambda_bin_content)
+
+    #initialize new lambda content
+    new_lambda_bin_content = np.empty(lambda_bin_content.shape)
+
+    below_fit_init = lambda_bin_centers <= lambda_fit_init
+    above_fit_init = np.logical_not(below_fit_init)
+
+    new_lambda_bin_content[below_fit_init] = lambda_bin_content[below_fit_init] / integral
+    new_lambda_bin_content[above_fit_init] = (1 - lambda_cdf[below_fit_init][-1])*lambda_tail_slope*np.exp(-lambda_tail_slope*(lambda_bin_centers[above_fit_init] - lambda_fit_init) )
+
+    return lambda_bin_centers, new_lambda_bin_content
+
 if __name__ == '__main__':
 
     #define a few constants
@@ -192,6 +241,7 @@ if __name__ == '__main__':
 
     #save the size of the target around flare
     target_radius = np.radians(float(os.path.basename(filelist_flare_info[0])[46:49]))
+    patch_radius = np.radians(25)
 
     #get postrial pvalues
     file_postrial_pvalues = 'Postrial_PValues_FlareLattice_patchRadius_25_targetRadius_%.1f.pkl' % np.degrees(target_radius)
@@ -456,16 +506,16 @@ if __name__ == '__main__':
         #ax_lambda_pvalues_1month.errorbar(pv_lambda_bin_centers_1month, pv_lambda_bin_content_1month, yerr = pv_lambda_bin_error_1month)
 
     #plot the lambda and n distributions for isotropy
-    lambda_bin_centers_1day, lambda_bin_content_1day, lambda_bin_error_1day = get_normalized_pdf(plotted_lambda_dist_iso, nbins_lambda)
+    lambda_bin_centers_1day, lambda_bin_content_1day = get_lambda_dist_iso(patch_radius, target_radius, mu_at_flare)
     poisson_bin_centers_1day, poisson_bin_content_1day, poisson_bin_error_1day = get_normalized_pdf(plotted_poisson_dist_iso, nbins_poisson)
 
-    lambda_bin_centers_1month, lambda_bin_content_1month, lambda_bin_error_1month = get_normalized_pdf(plotted_lambda_dist_iso, nbins_lambda)
-    poisson_bin_centers_1month, poisson_bin_content_1month, poisson_bin_error_1month = get_normalized_pdf(plotted_poisson_dist_iso, nbins_poisson)
+    #lambda_bin_centers_1month, lambda_bin_content_1month, lambda_bin_error_1month = get_normalized_pdf(plotted_lambda_dist_iso, nbins_lambda)
+    #poisson_bin_centers_1month, poisson_bin_content_1month, poisson_bin_error_1month = get_normalized_pdf(plotted_poisson_dist_iso, nbins_poisson)
 
     ax_lambda_dist_1day.plot(lambda_bin_centers_1day, lambda_bin_content_1day, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
-    ax_lambda_dist_1month.plot(lambda_bin_centers_1month, lambda_bin_content_1month, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
-    ax_lambda_dist_1day.fill_between(lambda_bin_centers_1day, lambda_bin_content_1day - lambda_bin_error_1day, lambda_bin_content_1day  + lambda_bin_error_1day, color = 'tab:grey', alpha = .5)
-    ax_lambda_dist_1month.fill_between(lambda_bin_centers_1month, lambda_bin_content_1month - lambda_bin_error_1month, lambda_bin_content_1month  + lambda_bin_error_1month, color = 'tab:grey', alpha = .5)
+    ax_lambda_dist_1month.plot(lambda_bin_centers_1day, lambda_bin_content_1day, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
+    #ax_lambda_dist_1day.fill_between(lambda_bin_centers_1day, lambda_bin_content_1day - lambda_bin_error_1day, lambda_bin_content_1day  + lambda_bin_error_1day, color = 'tab:grey', alpha = .5)
+    #ax_lambda_dist_1month.fill_between(lambda_bin_centers_1month, lambda_bin_content_1month - lambda_bin_error_1month, lambda_bin_content_1month  + lambda_bin_error_1month, color = 'tab:grey', alpha = .5)
 
     ax_poisson_dist_1day.plot(poisson_bin_centers_1day, poisson_bin_content_1day, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
     ax_poisson_dist_1month.plot(poisson_bin_centers_1month, poisson_bin_content_1month, color = 'tab:grey', linestyle = 'dashed', linewidth = 1)
@@ -484,6 +534,8 @@ if __name__ == '__main__':
     ax_lambda_pvalues_1month.set_yscale('log')
     ax_poisson_pvalues_1month.set_yscale('log')
 
+    ax_lambda_dist_1day.set_ylim(1e-5, 1)
+    ax_lambda_dist_1month.set_ylim(1e-5, 1)
 
     ax_lambda_pvalues_1day.set_ylim(1e-3, 10)
     ax_poisson_pvalues_1day.set_ylim(1e-3, 10)
